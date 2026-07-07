@@ -17,6 +17,11 @@ final class AppState: ObservableObject {
     }
 
     func refresh() {
+        // Pick up external edits (helper, another instance) instead of
+        // clobbering them with our stale in-memory copy on the next save.
+        let onDisk = ConfigStore.load()
+        if onDisk != config { config = onDisk }
+
         claudeHooks = HookInstaller.claudeStatus()
         codexHooks = HookInstaller.codexStatus()
         let state = StateStore.load()

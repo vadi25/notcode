@@ -134,6 +134,18 @@ final class HookInstallerMergeTests: XCTestCase {
         XCTAssertTrue(updated.contains("model = \"gpt-5\""))
     }
 
+    func testHelperOnlyChainWhenDownstreamOfCodexApp() {
+        let script = HookInstaller.chainScriptContent(existingCommand: [])
+        XCTAssertTrue(script.contains("notcode-hook' codex \"$@\""))
+        XCTAssertFalse(script.contains("SkyClient"))
+
+        let rewritten = #"notify = ["/x/SkyComputerUseClient", "turn-ended", "--previous-notify", "[\"/y/NotCode/codex-notify-chain.sh\"]"]"#
+        XCTAssertTrue(HookInstaller.codexChainIsDownstream(notifyLine: rewritten))
+        XCTAssertTrue(HookInstaller.isOurNotify(rewritten), "downstream chain still counts as installed")
+        XCTAssertFalse(HookInstaller.codexChainIsDownstream(
+            notifyLine: #"notify = ["/y/NotCode/codex-notify-chain.sh"]"#))
+    }
+
     func testChainScriptForwardsToBothHandlers() {
         let script = HookInstaller.chainScriptContent(
             existingCommand: ["/Users/x/Sky Client.app/MacOS/SkyClient", "turn-ended"])
