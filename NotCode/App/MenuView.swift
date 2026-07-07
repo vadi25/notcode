@@ -16,7 +16,7 @@ struct MenuView: View {
                 state.config.paused.toggle()
             }
 
-            Button("Send Test Notification") {
+            Button("Test: Sound + WhatsApp to Me") {
                 state.sendTestNotification()
             }
             if let result = state.testResult {
@@ -25,8 +25,13 @@ struct MenuView: View {
 
             Divider()
 
-            Button("Settings…") { SettingsOpener.open() }
-                .keyboardShortcut(",")
+            if #available(macOS 14.0, *) {
+                SettingsLink { Text("Settings…") }
+                    .keyboardShortcut(",")
+            } else {
+                Button("Settings…") { SettingsOpener.open() }
+                    .keyboardShortcut(",")
+            }
             Button("Setup Guide…") { AppDelegate.instance?.showOnboarding() }
 
             Divider()

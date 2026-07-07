@@ -17,7 +17,12 @@ struct SettingsView: View {
                 .tabItem { Label("Agents", systemImage: "terminal") }
         }
         .frame(width: 520, height: 460)
-        .onAppear { state.refresh() }
+        .onAppear {
+            state.refresh()
+            // Menu bar apps have no dock presence; without this the settings
+            // window can open behind other apps.
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 }
 
