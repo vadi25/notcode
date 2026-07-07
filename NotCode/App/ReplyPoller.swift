@@ -54,25 +54,31 @@ final class ReplyPoller: ObservableObject {
 
     private func poll() {
         let since = lastPoll ?? Date()
-        lastPoll = Date()
+        let attempted = Date()
         let config = self.config
         Task.detached(priority: .utility) { [weak self] in
             let client = KapsoClient(apiKey: config.kapsoAPIKey,
                                      phoneNumberID: config.phoneNumberID)
             // Small overlap so a message landing mid-poll isn't missed; the
             // processed-id set deduplicates.
-            guard case .success(let messages) =
-                client.listInboundMessages(since: since.addingTimeInterval(-30))
-            else { return }
+            switch client.listInboundMessages(since: since.addingTimeInterval(-30)) {
+            case .failure(let error):
+                // Keep `since` where it was — a reply sent during an outage
+                // must still be picked up by the next successful poll.
+                Log.append("reply loop: poll failed (\(error))")
+                return
+            case .success(let messages):
+                await MainActor.run { [weak self] in self?.lastPoll = attempted }
 
-            let state = StateStore.load()
-            for message in messages {
-                guard !state.processedMessageIDs.contains(message.id),
-                      KapsoClient.phoneMatches(message.from, config.recipientPhone)
-                else { continue }
-                StateStore.markProcessed(message.id)
-                Log.append("reply loop: inbound \(message.id)")
-                await self?.handle(message.text, client: client, config: config)
+                let state = StateStore.load()
+                for message in messages {
+                    guard !state.processedMessageIDs.contains(message.id),
+                          KapsoClient.phoneMatches(message.from, config.recipientPhone)
+                    else { continue }
+                    StateStore.markProcessed(message.id)
+                    Log.append("reply loop: inbound \(message.id)")
+                    await self?.handle(message.text, client: client, config: config)
+                }
             }
         }
     }
