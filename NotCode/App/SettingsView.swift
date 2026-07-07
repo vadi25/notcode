@@ -15,6 +15,8 @@ struct SettingsView: View {
                 .tabItem { Label("Behavior", systemImage: "gearshape") }
             AgentsSettings()
                 .tabItem { Label("Agents", systemImage: "terminal") }
+            BetaSettings()
+                .tabItem { Label("Beta", systemImage: "testtube.2") }
         }
         .frame(width: 520, height: 460)
         .onAppear {
@@ -41,18 +43,6 @@ struct WhatsAppSettings: View {
                 TextField("WhatsApp phone number ID", text: $state.config.phoneNumberID)
                 TextField("Your phone number (e.g. 34600111222)", text: $state.config.recipientPhone)
                 Text("Get these at [kapso.com](https://kapso.com): connect a WhatsApp number, then copy the API key from Project Settings → API Keys and the phone number ID from the number's page.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Reply from your phone (beta)") {
-                Toggle("Continue sessions by replying on WhatsApp",
-                       isOn: $state.config.replyLoopEnabled)
-                if state.config.replyLoopEnabled {
-                    Toggle("Include a short excerpt of the agent's answer",
-                           isOn: $state.config.replyExcerptEnabled)
-                }
-                Text("Reply to any notification to keep prompting that session, or use \"project-name: your message\" to target a specific one — text \"help\" to your Kapso number for a cheat sheet. Only messages from your own number are accepted, and remote runs never skip permission prompts. Needs the NotCode app running; Claude Code sessions continue as a headless branch, so the original terminal won't show remote turns.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -292,6 +282,67 @@ struct BehaviorSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Beta features
+
+/// Home for experimental features. Each one gets its own section with a BETA
+/// badge, an honest description, and any sub-options — add new betas here and
+/// remove them when they graduate to a normal tab.
+struct BetaSettings: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        Form {
+            Section {
+                Label {
+                    Text("These features work, but they're new and their edges may be rough. They're off by default, safe to toggle anytime, and feedback is very welcome — [open an issue](https://github.com/vadi25/notcode/issues) if something feels wrong.")
+                        .font(.caption)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                }
+            }
+
+            Section {
+                Toggle(isOn: $state.config.replyLoopEnabled) {
+                    betaTitle("Reply from your phone")
+                }
+                if state.config.replyLoopEnabled {
+                    Toggle("Include a short excerpt of the agent's answer",
+                           isOn: $state.config.replyExcerptEnabled)
+                }
+                Text("Reply to any WhatsApp notification to keep prompting that session, or use \"project-name: your message\" to target a specific one — text \"help\" to your Kapso number for a cheat sheet. Only messages from your own number are accepted, and remote runs never skip permission prompts. Needs WhatsApp configured and the NotCode app running; Claude Code sessions continue headlessly, so a terminal still open on that session won't show the remote turns.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if state.config.replyLoopEnabled && !state.config.whatsAppEnabled {
+                    Label("WhatsApp notifications are off — turn them on in the WhatsApp tab for replies to work.",
+                          systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            Section {
+                Text("That's all for now — new experiments will land here first.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func betaTitle(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Text("BETA")
+                .font(.system(size: 9, weight: .bold))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(Capsule().fill(Color.orange.opacity(0.2)))
+                .foregroundStyle(.orange)
+        }
     }
 }
 

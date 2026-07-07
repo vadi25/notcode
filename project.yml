@@ -39,7 +39,7 @@ targets:
       properties:
         CFBundleDisplayName: NotCode
         CFBundleIconFile: AppIcon
-        CFBundleShortVersionString: "1.2.2"
+        CFBundleShortVersionString: "1.2.3"
         CFBundleVersion: "1"
         LSUIElement: true
         LSMinimumSystemVersion: "13.0"
