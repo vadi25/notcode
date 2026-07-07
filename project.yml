@@ -29,6 +29,8 @@ targets:
       - path: NotCode/Resources/Sounds
         type: folder
         buildPhase: resources
+      - path: NotCode/Resources/AppIcon.icns
+        buildPhase: resources
     dependencies:
       - target: notcode-hook
         embed: false
@@ -36,7 +38,8 @@ targets:
       path: NotCode/App/Info.plist
       properties:
         CFBundleDisplayName: NotCode
-        CFBundleShortVersionString: "1.2.0"
+        CFBundleIconFile: AppIcon
+        CFBundleShortVersionString: "1.2.1"
         CFBundleVersion: "1"
         LSUIElement: true
         LSMinimumSystemVersion: "13.0"
