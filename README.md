@@ -80,6 +80,10 @@ Under the hood it resumes the session headlessly (`claude -p --resume`, `codex e
 - Completion messages are **status-only** by default; an optional toggle includes a short excerpt of the agent's answer
 - Claude Code replies continue the conversation headlessly, so a terminal still sitting open on that session won't display the remote turns
 
+## Can't see the bell?
+
+macOS hides the leftmost menu bar icons when the bar runs out of space (very common around the notch). NotCode keeps working either way — hooks and notifications don't depend on the icon. To bring it back, quit a menu bar app you don't use; and opening NotCode again (Spotlight or Applications) always opens its Settings window, so the app is never unreachable.
+
 ## Build from source
 
 ```bash

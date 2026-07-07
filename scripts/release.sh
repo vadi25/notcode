@@ -27,40 +27,22 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 mkdir "$STAGE/.background"
 cp assets/dmg/background.png "$STAGE/.background/background.png"
+# Finder window layout (background, icon positions, view options), captured
+# once from a Finder-arranged volume and committed. Regenerate by mounting a
+# NotCode DMG read-write, arranging it in Finder, and copying its .DS_Store
+# back to assets/dmg/. The volume name must stay "NotCode" or the background
+# reference inside breaks.
+cp assets/dmg/DS_Store "$STAGE/.DS_Store"
+cp NotCode/Resources/AppIcon.icns "$STAGE/.VolumeIcon.icns"
 
-# Build read-write first so Finder can lay out the window (background image,
-# icon positions), then compress. Detach any stale mount from a failed run.
+# Brief read-write pass only to set the volume's custom-icon flag (it lives
+# on the mounted volume root, not in any file). No Finder scripting — that
+# needs an Automation permission and is flaky in CI/terminals.
 [ -d /Volumes/NotCode ] && hdiutil detach /Volumes/NotCode -quiet || true
 RW="dist/NotCode-rw.dmg"
 rm -f "$RW"
 hdiutil create -volname "NotCode" -srcfolder "$STAGE" -ov -format UDRW "$RW" -quiet
 hdiutil attach "$RW" -noverify -nobrowse
-
-osascript <<'OSA'
-tell application "Finder"
-    tell disk "NotCode"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set the bounds of container window to {200, 120, 860, 520}
-        set viewOptions to the icon view options of container window
-        set arrangement of viewOptions to not arranged
-        set icon size of viewOptions to 104
-        set text size of viewOptions to 13
-        set background picture of viewOptions to file ".background:background.png"
-        set position of item "NotCode.app" of container window to {165, 215}
-        set position of item "Applications" of container window to {495, 215}
-        update without registering applications
-        delay 1
-        close
-    end tell
-end tell
-OSA
-
-# Volume icon must go on AFTER the Finder pass: Finder deletes
-# .VolumeIcon.icns and clears the custom-icon flag while applying the layout.
-cp NotCode/Resources/AppIcon.icns /Volumes/NotCode/.VolumeIcon.icns
 SetFile -a C /Volumes/NotCode
 sync
 hdiutil detach /Volumes/NotCode -quiet
