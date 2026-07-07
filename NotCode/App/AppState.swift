@@ -10,10 +10,44 @@ final class AppState: ObservableObject {
     @Published var lastNotification: String?
     @Published var lastDeliveryProblem: String?
     @Published var testResult: String?
+    @Published var availableUpdate: String?   // e.g. "v1.0.1"
+    @Published var updating = false
+
+    private var updateTimer: Timer?
 
     init() {
         config = ConfigStore.load()
         refresh()
+        checkForUpdates()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            self?.checkForUpdates()
+        }
+    }
+
+    func checkForUpdates() {
+        Task {
+            let newer = await UpdateChecker.checkForUpdate()
+            await MainActor.run { self.availableUpdate = newer }
+        }
+    }
+
+    func performUpdate() {
+        guard UpdateChecker.canSelfUpdate else {
+            NSWorkspace.shared.open(UpdateChecker.releasesPage)
+            return
+        }
+        updating = true
+        Task {
+            do {
+                try await UpdateChecker.downloadAndInstall()
+            } catch {
+                Log.append("update failed: \(error)")
+                await MainActor.run {
+                    self.updating = false
+                    self.testResult = "Update failed: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 
     func refresh() {

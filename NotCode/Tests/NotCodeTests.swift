@@ -166,6 +166,17 @@ final class HookInstallerMergeTests: XCTestCase {
     }
 }
 
+final class VersionCompareTests: XCTestCase {
+    func testIsNewer() {
+        XCTAssertTrue(VersionCompare.isNewer("v1.0.1", than: "1.0.0"))
+        XCTAssertTrue(VersionCompare.isNewer("1.0.10", than: "1.0.9"))
+        XCTAssertTrue(VersionCompare.isNewer("2.0", than: "1.9.9"))
+        XCTAssertFalse(VersionCompare.isNewer("1.0.0", than: "1.0.0"))
+        XCTAssertFalse(VersionCompare.isNewer("v0.9", than: "1.0.0"))
+        XCTAssertFalse(VersionCompare.isNewer("1.0.0", than: "1.0.1"))
+    }
+}
+
 final class ConfigTests: XCTestCase {
     func testConfigRoundTrip() throws {
         var config = NotCodeConfig()

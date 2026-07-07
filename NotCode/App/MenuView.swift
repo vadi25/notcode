@@ -26,6 +26,14 @@ struct MenuView: View {
                 Text(result)
             }
 
+            if let update = state.availableUpdate {
+                Divider()
+                Button(state.updating ? "Updating…" : "⬆️ Update to \(update)") {
+                    state.performUpdate()
+                }
+                .disabled(state.updating)
+            }
+
             Divider()
 
             if #available(macOS 14.0, *) {
