@@ -39,13 +39,11 @@ struct OnboardingView: View {
 
                 step(3, "Connect your agents") {
                     HStack {
-                        Button("Install Claude Code + Codex + Cursor hooks") {
+                        Button("Install \(AgentRegistry.all.map(\.name).joined(separator: " + ")) hooks") {
                             state.config.whatsAppEnabled = state.config.hasKapsoCredentials
-                            installMessage = state.installHooks(claude: true, codex: true, cursor: true)
-                                ?? "Hooks installed ✓"
+                            installMessage = state.installAllHooks() ?? "Hooks installed ✓"
                         }
-                        if state.claudeHooks == .installed && state.codexHooks == .installed
-                            && state.cursorHooks == .installed {
+                        if state.allHooksInstalled {
                             Label("Done", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                         }

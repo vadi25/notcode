@@ -23,7 +23,7 @@ enum HelperDeployer {
             Log.append("deploy: notcode-hook not found in app bundle")
         }
 
-        HookInstaller.repairCodexChain()
+        for module in AgentRegistry.all { module.repairAfterLaunch() }
 
         if let sounds = Bundle.main.resourceURL?.appendingPathComponent("Sounds"),
            fm.fileExists(atPath: sounds.path) {

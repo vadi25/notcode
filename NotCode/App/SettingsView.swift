@@ -167,9 +167,11 @@ struct BehaviorSettings: View {
             }
 
             Section("Agents") {
-                Toggle("Claude Code", isOn: $state.config.claudeEnabled)
-                Toggle("Codex", isOn: $state.config.codexEnabled)
-                Toggle("Cursor", isOn: $state.config.cursorEnabled)
+                ForEach(AgentRegistry.all, id: \.name) { agent in
+                    Toggle(agent.name, isOn: Binding(
+                        get: { state.config.isEnabled(agent.name) },
+                        set: { state.config.setEnabled(agent.name, $0) }))
+                }
             }
 
             Section("Quiet while you work") {
@@ -224,31 +226,21 @@ struct AgentsSettings: View {
 
     var body: some View {
         Form {
-            Section("Claude Code") {
-                statusRow(state.claudeHooks,
-                          detail: "Adds Notification + Stop hooks to ~/.claude/settings.json")
-                HStack {
-                    Button("Install hooks") { install(claude: true, codex: false, cursor: false) }
-                        .disabled(state.claudeHooks == .installed)
-                    Button("Preview change") {
-                        claudePreview = (try? HookInstaller.claudePreview()) ?? "(unavailable)"
-                        showClaudePreview = true
+            ForEach(AgentRegistry.all, id: \.name) { agent in
+                Section(agent.name) {
+                    statusRow(state.hookStatuses[agent.name] ?? .notInstalled,
+                              detail: agent.installDetail)
+                    HStack {
+                        Button("Install hooks") { install(agent.name) }
+                            .disabled(state.hookStatuses[agent.name] == .installed)
+                        if (try? agent.installPreview()) != nil {
+                            Button("Preview change") {
+                                claudePreview = (try? agent.installPreview() ?? nil) ?? "(unavailable)"
+                                showClaudePreview = true
+                            }
+                        }
                     }
                 }
-            }
-
-            Section("Codex") {
-                statusRow(state.codexHooks,
-                          detail: "Adds notify = [\"…/notcode-hook\", \"codex\"] to ~/.codex/config.toml")
-                Button("Install hook") { install(claude: false, codex: true, cursor: false) }
-                    .disabled(state.codexHooks == .installed)
-            }
-
-            Section("Cursor") {
-                statusRow(state.cursorHooks,
-                          detail: "Adds a stop hook to ~/.cursor/hooks.json — like Codex, Cursor only reports when a task finishes (no attention events)")
-                Button("Install hook") { install(claude: false, codex: false, cursor: true) }
-                    .disabled(state.cursorHooks == .installed)
             }
 
             Section {
@@ -279,8 +271,8 @@ struct AgentsSettings: View {
         }
     }
 
-    private func install(claude: Bool, codex: Bool, cursor: Bool) {
-        message = state.installHooks(claude: claude, codex: codex, cursor: cursor) ?? "Installed ✓"
+    private func install(_ agent: String) {
+        message = state.installHooks(agents: [agent]) ?? "Installed ✓"
     }
 
     @ViewBuilder

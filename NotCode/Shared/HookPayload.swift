@@ -1,13 +1,15 @@
 import Foundation
 
 /// A normalized notification event coming from any supported agent.
+/// Parsing of each agent's raw payload lives in its AgentModule
+/// (NotCode/Shared/Agents/).
 struct AgentEvent {
     enum Kind: String {
         case attention  // agent is waiting for the user (permission, question, idle)
         case done       // agent finished a task/turn
     }
 
-    var agent: String       // "Claude Code" | "Codex" | "Cursor"
+    var agent: String       // an AgentRegistry module name, e.g. "Claude Code"
     var kind: Kind
     var detail: String?     // e.g. Claude's notification message or task summary
     var cwd: String?
@@ -34,60 +36,5 @@ struct AgentEvent {
     /// Key used for rate limiting — same event type from the same session.
     var dedupeKey: String {
         "\(agent)|\(kind.rawValue)|\(sessionID ?? cwd ?? "global")"
-    }
-}
-
-enum HookPayload {
-    /// Claude Code hooks pass JSON on stdin, e.g.
-    /// {"session_id":"...","cwd":"...","hook_event_name":"Notification","message":"..."}
-    /// Returns nil for Stop events re-fired by hook-forced continuations
-    /// (stop_hook_active) — notifying those would duplicate the real stop.
-    static func parseClaude(kind: AgentEvent.Kind, json data: Data) -> AgentEvent? {
-        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        if kind == .done, object["stop_hook_active"] as? Bool == true {
-            return nil
-        }
-        return AgentEvent(
-            agent: "Claude Code",
-            kind: kind,
-            detail: kind == .attention ? object["message"] as? String : nil,
-            cwd: object["cwd"] as? String,
-            sessionID: object["session_id"] as? String)
-    }
-
-    /// Codex passes JSON as the last CLI argument, e.g.
-    /// {"type":"agent-turn-complete","turn-id":"...","input-messages":["..."],
-    ///  "last-assistant-message":"..."}
-    static func parseCodex(json data: Data) -> AgentEvent? {
-        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        let type = object["type"] as? String ?? "agent-turn-complete"
-        guard type == "agent-turn-complete" else { return nil }
-
-        var summary: String?
-        if let inputs = object["input-messages"] as? [String], let first = inputs.first {
-            summary = String(first.prefix(60))
-        }
-        return AgentEvent(
-            agent: "Codex",
-            kind: .done,
-            detail: summary,
-            cwd: object["cwd"] as? String,
-            sessionID: object["turn-id"] as? String)
-    }
-
-    /// Cursor's stop hook passes JSON on stdin, e.g.
-    /// {"hook_event_name":"stop","status":"completed","conversation_id":"...",
-    ///  "workspace_roots":["/path"],"loop_count":0}
-    /// Returns nil for status "aborted" — the user cancelled the turn, so
-    /// they're at the machine and a ding would be noise.
-    static func parseCursor(json data: Data) -> AgentEvent? {
-        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        if object["status"] as? String == "aborted" { return nil }
-        return AgentEvent(
-            agent: "Cursor",
-            kind: .done,
-            detail: nil,
-            cwd: (object["workspace_roots"] as? [String])?.first,
-            sessionID: object["conversation_id"] as? String)
     }
 }

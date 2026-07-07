@@ -1,13 +1,17 @@
 import XCTest
 
 final class HookPayloadTests: XCTestCase {
+    private let claude = ClaudeAgent()
+    private let codex = CodexAgent()
+    private let cursor = CursorAgent()
+
     func testClaudeNotificationParsing() {
         let json = """
         {"session_id":"abc123","cwd":"/Users/me/projects/my-app",
          "hook_event_name":"Notification",
          "message":"Claude needs your permission to use Bash"}
         """
-        let event = HookPayload.parseClaude(kind: .attention, json: Data(json.utf8))
+        let event = claude.parse(subcommand: "claude-notification", payload: Data(json.utf8))
         XCTAssertEqual(event?.agent, "Claude Code")
         XCTAssertEqual(event?.kind, .attention)
         XCTAssertEqual(event?.detail, "Claude needs your permission to use Bash")
@@ -17,20 +21,20 @@ final class HookPayloadTests: XCTestCase {
 
     func testClaudeStopParsing() {
         let json = #"{"session_id":"abc","cwd":"/tmp/demo","hook_event_name":"Stop"}"#
-        let event = HookPayload.parseClaude(kind: .done, json: Data(json.utf8))
+        let event = claude.parse(subcommand: "claude-stop", payload: Data(json.utf8))
         XCTAssertEqual(event?.kind, .done)
         XCTAssertNil(event?.detail)
     }
 
     func testStopHookActiveIsSkipped() {
         let json = #"{"session_id":"abc","cwd":"/tmp","stop_hook_active":true}"#
-        XCTAssertNil(HookPayload.parseClaude(kind: .done, json: Data(json.utf8)),
+        XCTAssertNil(claude.parse(subcommand: "claude-stop", payload: Data(json.utf8)),
                      "hook-forced continuations must not notify twice")
-        XCTAssertNotNil(HookPayload.parseClaude(kind: .attention, json: Data(json.utf8)))
+        XCTAssertNotNil(claude.parse(subcommand: "claude-notification", payload: Data(json.utf8)))
     }
 
     func testClaudeGarbageInputStillProducesEvent() {
-        let event = HookPayload.parseClaude(kind: .attention, json: Data("not json".utf8))
+        let event = claude.parse(subcommand: "claude-notification", payload: Data("not json".utf8))
         XCTAssertEqual(event?.agent, "Claude Code")
         XCTAssertNil(event?.cwd)
     }
@@ -41,7 +45,7 @@ final class HookPayloadTests: XCTestCase {
          "input-messages":["Fix the login bug in auth.ts please"],
          "last-assistant-message":"Done, the bug was..."}
         """
-        let event = HookPayload.parseCodex(json: Data(json.utf8))
+        let event = codex.parse(subcommand: "codex", payload: Data(json.utf8))
         XCTAssertNotNil(event)
         XCTAssertEqual(event?.agent, "Codex")
         XCTAssertEqual(event?.kind, .done)
@@ -52,7 +56,7 @@ final class HookPayloadTests: XCTestCase {
 
     func testCodexUnknownEventIsIgnored() {
         let json = #"{"type":"something-else"}"#
-        XCTAssertNil(HookPayload.parseCodex(json: Data(json.utf8)))
+        XCTAssertNil(codex.parse(subcommand: "codex", payload: Data(json.utf8)))
     }
 
     func testCursorStopParsing() {
@@ -60,7 +64,7 @@ final class HookPayloadTests: XCTestCase {
         {"hook_event_name":"stop","status":"completed","conversation_id":"conv-1",
          "workspace_roots":["/Users/me/projects/my-app"],"loop_count":0}
         """
-        let event = HookPayload.parseCursor(json: Data(json.utf8))
+        let event = cursor.parse(subcommand: "cursor", payload: Data(json.utf8))
         XCTAssertEqual(event?.agent, "Cursor")
         XCTAssertEqual(event?.kind, .done)
         XCTAssertNil(event?.detail)
@@ -70,10 +74,10 @@ final class HookPayloadTests: XCTestCase {
 
     func testCursorAbortedIsSkipped() {
         let json = #"{"hook_event_name":"stop","status":"aborted","conversation_id":"c"}"#
-        XCTAssertNil(HookPayload.parseCursor(json: Data(json.utf8)),
+        XCTAssertNil(cursor.parse(subcommand: "cursor", payload: Data(json.utf8)),
                      "an aborted turn means the user is at the machine")
         let errored = #"{"hook_event_name":"stop","status":"error","conversation_id":"c"}"#
-        XCTAssertNotNil(HookPayload.parseCursor(json: Data(errored.utf8)))
+        XCTAssertNotNil(cursor.parse(subcommand: "cursor", payload: Data(errored.utf8)))
     }
 
     func testWhatsAppTextFormats() {
@@ -90,8 +94,25 @@ final class HookPayloadTests: XCTestCase {
 }
 
 final class HookInstallerMergeTests: XCTestCase {
+    private let claude = ClaudeAgent()
+    private let codex = CodexAgent()
+    private let cursor = CursorAgent()
+
+    func testRegistryInvariants() {
+        let names = AgentRegistry.all.map(\.name)
+        XCTAssertEqual(Set(names).count, names.count, "agent names must be unique")
+        let subcommands = AgentRegistry.all.flatMap(\.hookSubcommands)
+        XCTAssertEqual(Set(subcommands).count, subcommands.count,
+                       "hook subcommands must be unique across modules")
+        // Installed hooks in the wild use these exact strings — never change them.
+        XCTAssertEqual(Set(subcommands),
+                       ["claude-notification", "claude-stop", "codex", "cursor"])
+        XCTAssertNil(AgentRegistry.bySubcommand("test"),
+                     "the built-in test subcommand must not be shadowed")
+    }
+
     func testMergeIntoEmptySettings() {
-        let merged = HookInstaller.merged(into: [:])
+        let merged = claude.merged(into: [:])
         let hooks = merged["hooks"] as? [String: Any]
         XCTAssertNotNil(hooks?["Notification"])
         XCTAssertNotNil(hooks?["Stop"])
@@ -110,7 +131,7 @@ final class HookInstallerMergeTests: XCTestCase {
                 ],
             ],
         ]
-        let merged = HookInstaller.merged(into: existing)
+        let merged = claude.merged(into: existing)
 
         XCTAssertEqual(merged["model"] as? String, "opus")
         XCTAssertNotNil(merged["permissions"])
@@ -127,8 +148,8 @@ final class HookInstallerMergeTests: XCTestCase {
     }
 
     func testMergeIsIdempotent() {
-        let once = HookInstaller.merged(into: [:])
-        let twice = HookInstaller.merged(into: once)
+        let once = claude.merged(into: [:])
+        let twice = claude.merged(into: once)
         let onceJSON = try! JSONSerialization.data(withJSONObject: once, options: .sortedKeys)
         let twiceJSON = try! JSONSerialization.data(withJSONObject: twice, options: .sortedKeys)
         XCTAssertEqual(onceJSON, twiceJSON)
@@ -136,9 +157,9 @@ final class HookInstallerMergeTests: XCTestCase {
 
     func testParseNotifyArray() throws {
         let line = #"notify = ["/Users/x/Sky Client.app/Contents/MacOS/SkyClient", "turn-ended"]"#
-        let tokens = try HookInstaller.parseNotifyArray(line)
+        let tokens = try codex.parseNotifyArray(line)
         XCTAssertEqual(tokens, ["/Users/x/Sky Client.app/Contents/MacOS/SkyClient", "turn-ended"])
-        XCTAssertThrowsError(try HookInstaller.parseNotifyArray("notify = not-an-array"))
+        XCTAssertThrowsError(try codex.parseNotifyArray("notify = not-an-array"))
     }
 
     func testReplaceRootNotifyOnlyTouchesRootLine() {
@@ -148,7 +169,7 @@ final class HookInstallerMergeTests: XCTestCase {
         [profiles.x]
         notify = ["inner-stays"]
         """
-        let updated = HookInstaller.replaceRootNotify(in: toml, with: "notify = [\"new\"]")
+        let updated = codex.replaceRootNotify(in: toml, with: "notify = [\"new\"]")
         XCTAssertTrue(updated.contains("notify = [\"new\"]"))
         XCTAssertTrue(updated.contains("notify = [\"inner-stays\"]"))
         XCTAssertFalse(updated.contains("notify = [\"old\"]"))
@@ -156,19 +177,19 @@ final class HookInstallerMergeTests: XCTestCase {
     }
 
     func testHelperOnlyChainWhenDownstreamOfCodexApp() {
-        let script = HookInstaller.chainScriptContent(existingCommand: [])
+        let script = codex.chainScriptContent(existingCommand: [])
         XCTAssertTrue(script.contains("notcode-hook' codex \"$@\""))
         XCTAssertFalse(script.contains("SkyClient"))
 
         let rewritten = #"notify = ["/x/SkyComputerUseClient", "turn-ended", "--previous-notify", "[\"/y/NotCode/codex-notify-chain.sh\"]"]"#
-        XCTAssertTrue(HookInstaller.codexChainIsDownstream(notifyLine: rewritten))
-        XCTAssertTrue(HookInstaller.isOurNotify(rewritten), "downstream chain still counts as installed")
-        XCTAssertFalse(HookInstaller.codexChainIsDownstream(
+        XCTAssertTrue(codex.chainIsDownstream(notifyLine: rewritten))
+        XCTAssertTrue(codex.isOurNotify(rewritten), "downstream chain still counts as installed")
+        XCTAssertFalse(codex.chainIsDownstream(
             notifyLine: #"notify = ["/y/NotCode/codex-notify-chain.sh"]"#))
     }
 
     func testChainScriptForwardsToBothHandlers() {
-        let script = HookInstaller.chainScriptContent(
+        let script = codex.chainScriptContent(
             existingCommand: ["/Users/x/Sky Client.app/MacOS/SkyClient", "turn-ended"])
         XCTAssertTrue(script.hasPrefix("#!/bin/bash"))
         XCTAssertTrue(script.contains("'/Users/x/Sky Client.app/MacOS/SkyClient' 'turn-ended' \"$@\""))
@@ -176,7 +197,7 @@ final class HookInstallerMergeTests: XCTestCase {
     }
 
     func testCursorMergeIntoEmptyHooks() {
-        let merged = HookInstaller.mergedCursorHooks(into: [:])
+        let merged = cursor.merged(into: [:])
         XCTAssertEqual(merged["version"] as? Int, 1)
         let hooks = merged["hooks"] as? [String: Any]
         let stop = hooks?["stop"] as? [[String: Any]]
@@ -193,7 +214,7 @@ final class HookInstallerMergeTests: XCTestCase {
                 "beforeShellExecution": [["command": "./scripts/audit.sh"]],
             ],
         ]
-        let merged = HookInstaller.mergedCursorHooks(into: existing)
+        let merged = cursor.merged(into: existing)
         let hooks = merged["hooks"] as! [String: Any]
         XCTAssertNotNil(hooks["beforeShellExecution"], "unrelated hook events must survive")
         let stop = hooks["stop"] as! [[String: Any]]
@@ -204,28 +225,28 @@ final class HookInstallerMergeTests: XCTestCase {
     }
 
     func testCursorMergeIsIdempotent() {
-        let once = HookInstaller.mergedCursorHooks(into: [:])
-        let twice = HookInstaller.mergedCursorHooks(into: once)
+        let once = cursor.merged(into: [:])
+        let twice = cursor.merged(into: once)
         let onceJSON = try! JSONSerialization.data(withJSONObject: once, options: .sortedKeys)
         let twiceJSON = try! JSONSerialization.data(withJSONObject: twice, options: .sortedKeys)
         XCTAssertEqual(onceJSON, twiceJSON)
     }
 
     func testCursorWrapperExecsHelper() {
-        let script = HookInstaller.cursorWrapperContent()
+        let script = cursor.wrapperContent()
         XCTAssertTrue(script.hasPrefix("#!/bin/bash"))
         XCTAssertTrue(script.contains("notcode-hook' cursor"))
     }
 
     func testCodexRootNotifyDetection() {
-        XCTAssertNil(HookInstaller.rootNotifyLine(in: ""))
-        XCTAssertNil(HookInstaller.rootNotifyLine(in: "model = \"gpt-5\"\n[tui]\nnotifications = true"))
-        XCTAssertNil(HookInstaller.rootNotifyLine(in: "[profiles.x]\nnotify = [\"foo\"]"),
+        XCTAssertNil(codex.rootNotifyLine(in: ""))
+        XCTAssertNil(codex.rootNotifyLine(in: "model = \"gpt-5\"\n[tui]\nnotifications = true"))
+        XCTAssertNil(codex.rootNotifyLine(in: "[profiles.x]\nnotify = [\"foo\"]"),
                      "notify inside a table is not a root notify")
         XCTAssertEqual(
-            HookInstaller.rootNotifyLine(in: "model = \"gpt-5\"\nnotify = [\"foo\"]\n[tui]"),
+            codex.rootNotifyLine(in: "model = \"gpt-5\"\nnotify = [\"foo\"]\n[tui]"),
             "notify = [\"foo\"]")
-        XCTAssertNotNil(HookInstaller.rootNotifyLine(in: "notify=[\"x\"]"))
+        XCTAssertNotNil(codex.rootNotifyLine(in: "notify=[\"x\"]"))
     }
 }
 
@@ -288,6 +309,19 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(decoded.recipientPhone, "34600111222")
         XCTAssertFalse(decoded.notifyAttention)
         XCTAssertTrue(decoded.suppressWhileWatching, "new fields fall back to defaults")
+    }
+
+    func testLegacyAgentBooleansMigrateToDisabledAgents() throws {
+        let old = #"{"claudeEnabled":false,"codexEnabled":true,"cursorEnabled":false}"#
+        let decoded = try JSONDecoder().decode(NotCodeConfig.self, from: Data(old.utf8))
+        XCTAssertFalse(decoded.isEnabled("Claude Code"))
+        XCTAssertTrue(decoded.isEnabled("Codex"))
+        XCTAssertFalse(decoded.isEnabled("Cursor"))
+
+        // Round-trips through the new representation.
+        let data = try JSONEncoder().encode(decoded)
+        let again = try JSONDecoder().decode(NotCodeConfig.self, from: data)
+        XCTAssertEqual(again.disabledAgents, ["Claude Code", "Cursor"])
     }
 
     func testHasKapsoCredentials() {

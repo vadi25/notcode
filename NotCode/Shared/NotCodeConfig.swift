@@ -28,9 +28,9 @@ struct NotCodeConfig: Codable, Equatable {
     var paused: Bool = false
     var notifyAttention: Bool = true
     var notifyDone: Bool = true
-    var claudeEnabled: Bool = true
-    var codexEnabled: Bool = true
-    var cursorEnabled: Bool = true
+    /// Agents the user muted, by AgentRegistry name. A set (rather than one
+    /// bool per agent) so new agent modules need no config change.
+    var disabledAgents: Set<String> = []
     /// Only send WhatsApp when no keyboard/mouse input for this long. 0 = always send.
     var awayOnlyWhatsApp: Bool = true
     var awayThresholdMinutes: Double = 2
@@ -50,6 +50,14 @@ struct NotCodeConfig: Codable, Equatable {
         !kapsoAPIKey.isEmpty && !phoneNumberID.isEmpty && !recipientPhone.isEmpty
     }
 
+    func isEnabled(_ agent: String) -> Bool {
+        !disabledAgents.contains(agent)
+    }
+
+    mutating func setEnabled(_ agent: String, _ enabled: Bool) {
+        if enabled { disabledAgents.remove(agent) } else { disabledAgents.insert(agent) }
+    }
+
     init() {}
 
     /// Tolerant decoding: any key missing from an older config.json keeps its
@@ -65,9 +73,13 @@ struct NotCodeConfig: Codable, Equatable {
         paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? d.paused
         notifyAttention = try c.decodeIfPresent(Bool.self, forKey: .notifyAttention) ?? d.notifyAttention
         notifyDone = try c.decodeIfPresent(Bool.self, forKey: .notifyDone) ?? d.notifyDone
-        claudeEnabled = try c.decodeIfPresent(Bool.self, forKey: .claudeEnabled) ?? d.claudeEnabled
-        codexEnabled = try c.decodeIfPresent(Bool.self, forKey: .codexEnabled) ?? d.codexEnabled
-        cursorEnabled = try c.decodeIfPresent(Bool.self, forKey: .cursorEnabled) ?? d.cursorEnabled
+        disabledAgents = try c.decodeIfPresent(Set<String>.self, forKey: .disabledAgents) ?? d.disabledAgents
+        // Migrate the pre-1.2 per-agent booleans into disabledAgents.
+        let legacy = try decoder.container(keyedBy: LegacyAgentKeys.self)
+        for (key, agent) in LegacyAgentKeys.agentNames
+        where (try? legacy.decodeIfPresent(Bool.self, forKey: key)) == false {
+            disabledAgents.insert(agent)
+        }
         awayOnlyWhatsApp = try c.decodeIfPresent(Bool.self, forKey: .awayOnlyWhatsApp) ?? d.awayOnlyWhatsApp
         awayThresholdMinutes = try c.decodeIfPresent(Double.self, forKey: .awayThresholdMinutes) ?? d.awayThresholdMinutes
         suppressWhileWatching = try c.decodeIfPresent(Bool.self, forKey: .suppressWhileWatching) ?? d.suppressWhileWatching
@@ -75,6 +87,16 @@ struct NotCodeConfig: Codable, Equatable {
         soundDone = try c.decodeIfPresent(SoundChoice.self, forKey: .soundDone) ?? d.soundDone
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? d.volume
         onboardingCompleted = try c.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? d.onboardingCompleted
+    }
+
+    private enum LegacyAgentKeys: String, CodingKey {
+        case claudeEnabled, codexEnabled, cursorEnabled
+
+        static let agentNames: [(LegacyAgentKeys, String)] = [
+            (.claudeEnabled, "Claude Code"),
+            (.codexEnabled, "Codex"),
+            (.cursorEnabled, "Cursor"),
+        ]
     }
 }
 

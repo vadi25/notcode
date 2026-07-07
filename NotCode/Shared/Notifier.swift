@@ -27,16 +27,15 @@ enum Notifier {
                 return outcome
             default: break
             }
-            if (event.agent == "Claude Code" && !config.claudeEnabled)
-                || (event.agent == "Codex" && !config.codexEnabled)
-                || (event.agent == "Cursor" && !config.cursorEnabled) {
+            if !config.isEnabled(event.agent) {
                 outcome.skippedReason = "agent disabled"
                 return outcome
             }
-            // Cursor is exempt from the watching filter: its agent panel can be
-            // hidden while you code in the same window, so being in Cursor does
-            // not mean you saw the run finish (unlike a CLI in a terminal).
-            if config.suppressWhileWatching, event.agent != "Cursor",
+            // Some agents (Cursor) are exempt from the watching filter: their
+            // agent panel can be hidden while you code in the same window, so
+            // being in the app does not mean you saw the run finish.
+            if config.suppressWhileWatching,
+               AgentRegistry.byName(event.agent)?.bypassesWatchingFilter != true,
                FocusDetector.userIsWatchingTerminal(
                    awayThresholdSeconds: config.awayThresholdMinutes * 60) {
                 outcome.skippedReason = "user is watching the terminal"

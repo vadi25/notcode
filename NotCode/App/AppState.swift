@@ -5,9 +5,7 @@ final class AppState: ObservableObject {
     @Published var config: NotCodeConfig {
         didSet { try? ConfigStore.save(config) }
     }
-    @Published var claudeHooks: HookInstaller.Status = .notInstalled
-    @Published var codexHooks: HookInstaller.Status = .notInstalled
-    @Published var cursorHooks: HookInstaller.Status = .notInstalled
+    @Published var hookStatuses: [String: HookInstaller.Status] = [:]
     @Published var lastNotification: String?
     @Published var lastDeliveryProblem: String?
     @Published var testResult: String?
@@ -57,9 +55,8 @@ final class AppState: ObservableObject {
         let onDisk = ConfigStore.load()
         if onDisk != config { config = onDisk }
 
-        claudeHooks = HookInstaller.claudeStatus()
-        codexHooks = HookInstaller.codexStatus()
-        cursorHooks = HookInstaller.cursorStatus()
+        hookStatuses = Dictionary(uniqueKeysWithValues:
+            AgentRegistry.all.map { ($0.name, $0.hookStatus()) })
         let state = StateStore.load()
         lastNotification = state.lastNotification
         lastDeliveryProblem = state.lastDeliveryProblem
@@ -89,33 +86,32 @@ final class AppState: ObservableObject {
         }
     }
 
-    func installHooks(claude: Bool, codex: Bool, cursor: Bool) -> String? {
+    /// Installs hooks for the named agents; pass AgentRegistry names.
+    func installHooks(agents: [String]) -> String? {
         var errors: [String] = []
-        if claude {
-            do { try HookInstaller.installClaude() }
-            catch { errors.append("Claude Code: \(error.localizedDescription)") }
-        }
-        if codex {
-            do { try HookInstaller.installCodex() }
-            catch { errors.append("Codex: \(error.localizedDescription)") }
-        }
-        if cursor {
-            do { try HookInstaller.installCursor() }
-            catch { errors.append("Cursor: \(error.localizedDescription)") }
+        for module in AgentRegistry.all where agents.contains(module.name) {
+            do { try module.installHooks() }
+            catch { errors.append("\(module.name): \(error.localizedDescription)") }
         }
         refresh()
         return errors.isEmpty ? nil : errors.joined(separator: "\n")
     }
 
+    func installAllHooks() -> String? {
+        installHooks(agents: AgentRegistry.all.map(\.name))
+    }
+
     func uninstallHooks() -> String? {
         var errors: [String] = []
-        do { try HookInstaller.uninstallClaude() }
-        catch { errors.append("Claude Code: \(error.localizedDescription)") }
-        do { try HookInstaller.uninstallCodex() }
-        catch { errors.append("Codex: \(error.localizedDescription)") }
-        do { try HookInstaller.uninstallCursor() }
-        catch { errors.append("Cursor: \(error.localizedDescription)") }
+        for module in AgentRegistry.all {
+            do { try module.uninstallHooks() }
+            catch { errors.append("\(module.name): \(error.localizedDescription)") }
+        }
         refresh()
         return errors.isEmpty ? nil : errors.joined(separator: "\n")
+    }
+
+    var allHooksInstalled: Bool {
+        AgentRegistry.all.allSatisfy { hookStatuses[$0.name] == .installed }
     }
 }

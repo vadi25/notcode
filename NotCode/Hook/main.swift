@@ -1,10 +1,9 @@
 import Foundation
 
-// notcode-hook — invoked by Claude Code hooks (JSON on stdin), Codex's
-// notify config (JSON as the last argument), and Cursor's stop hook (JSON on
-// stdin, via the ~/.cursor/notcode-hook.sh wrapper). Must always exit 0
-// quickly, and never write JSON to stdout — Cursor would interpret a
-// followup_message as an instruction to keep the agent going.
+// notcode-hook — invoked by the agents' own hook mechanisms; each subcommand
+// belongs to one AgentModule in the registry. Must always exit 0 quickly, and
+// never write JSON to stdout — Cursor would interpret a followup_message as an
+// instruction to keep the agent going.
 
 func run() {
     let arguments = CommandLine.arguments
@@ -12,28 +11,25 @@ func run() {
         Log.append("hook: missing subcommand")
         return
     }
+    let subcommand = arguments[1]
 
     let event: AgentEvent?
-    switch arguments[1] {
-    case "claude-notification":
-        let input = FileHandle.standardInput.readDataToEndOfFile()
-        event = HookPayload.parseClaude(kind: .attention, json: input)
-    case "claude-stop":
-        let input = FileHandle.standardInput.readDataToEndOfFile()
-        event = HookPayload.parseClaude(kind: .done, json: input)
-    case "codex":
-        let payload = arguments.count >= 3 ? Data(arguments[2].utf8) : Data()
-        event = HookPayload.parseCodex(json: payload)
-    case "cursor":
-        let input = FileHandle.standardInput.readDataToEndOfFile()
-        event = HookPayload.parseCursor(json: input)
-    case "test":
+    if let module = AgentRegistry.bySubcommand(subcommand) {
+        let payload: Data
+        switch module.payloadSource {
+        case .stdin:
+            payload = FileHandle.standardInput.readDataToEndOfFile()
+        case .argument:
+            payload = arguments.count >= 3 ? Data(arguments[2].utf8) : Data()
+        }
+        event = module.parse(subcommand: subcommand, payload: payload)
+    } else if subcommand == "test" {
         event = AgentEvent(agent: "Claude Code", kind: .attention,
                            detail: "test notification from notcode-hook",
                            cwd: FileManager.default.currentDirectoryPath,
                            sessionID: "test")
-    default:
-        Log.append("hook: unknown subcommand \(arguments[1])")
+    } else {
+        Log.append("hook: unknown subcommand \(subcommand)")
         return
     }
 
