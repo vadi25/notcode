@@ -169,6 +169,7 @@ struct BehaviorSettings: View {
             Section("Agents") {
                 Toggle("Claude Code", isOn: $state.config.claudeEnabled)
                 Toggle("Codex", isOn: $state.config.codexEnabled)
+                Toggle("Cursor", isOn: $state.config.cursorEnabled)
             }
 
             Section("Quiet while you work") {
@@ -227,7 +228,7 @@ struct AgentsSettings: View {
                 statusRow(state.claudeHooks,
                           detail: "Adds Notification + Stop hooks to ~/.claude/settings.json")
                 HStack {
-                    Button("Install hooks") { install(claude: true, codex: false) }
+                    Button("Install hooks") { install(claude: true, codex: false, cursor: false) }
                         .disabled(state.claudeHooks == .installed)
                     Button("Preview change") {
                         claudePreview = (try? HookInstaller.claudePreview()) ?? "(unavailable)"
@@ -239,8 +240,15 @@ struct AgentsSettings: View {
             Section("Codex") {
                 statusRow(state.codexHooks,
                           detail: "Adds notify = [\"…/notcode-hook\", \"codex\"] to ~/.codex/config.toml")
-                Button("Install hook") { install(claude: false, codex: true) }
+                Button("Install hook") { install(claude: false, codex: true, cursor: false) }
                     .disabled(state.codexHooks == .installed)
+            }
+
+            Section("Cursor") {
+                statusRow(state.cursorHooks,
+                          detail: "Adds a stop hook to ~/.cursor/hooks.json — like Codex, Cursor only reports when a task finishes (no attention events)")
+                Button("Install hook") { install(claude: false, codex: false, cursor: true) }
+                    .disabled(state.cursorHooks == .installed)
             }
 
             Section {
@@ -271,8 +279,8 @@ struct AgentsSettings: View {
         }
     }
 
-    private func install(claude: Bool, codex: Bool) {
-        message = state.installHooks(claude: claude, codex: codex) ?? "Installed ✓"
+    private func install(claude: Bool, codex: Bool, cursor: Bool) {
+        message = state.installHooks(claude: claude, codex: codex, cursor: cursor) ?? "Installed ✓"
     }
 
     @ViewBuilder

@@ -7,6 +7,7 @@ final class AppState: ObservableObject {
     }
     @Published var claudeHooks: HookInstaller.Status = .notInstalled
     @Published var codexHooks: HookInstaller.Status = .notInstalled
+    @Published var cursorHooks: HookInstaller.Status = .notInstalled
     @Published var lastNotification: String?
     @Published var lastDeliveryProblem: String?
     @Published var testResult: String?
@@ -58,6 +59,7 @@ final class AppState: ObservableObject {
 
         claudeHooks = HookInstaller.claudeStatus()
         codexHooks = HookInstaller.codexStatus()
+        cursorHooks = HookInstaller.cursorStatus()
         let state = StateStore.load()
         lastNotification = state.lastNotification
         lastDeliveryProblem = state.lastDeliveryProblem
@@ -87,7 +89,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    func installHooks(claude: Bool, codex: Bool) -> String? {
+    func installHooks(claude: Bool, codex: Bool, cursor: Bool) -> String? {
         var errors: [String] = []
         if claude {
             do { try HookInstaller.installClaude() }
@@ -96,6 +98,10 @@ final class AppState: ObservableObject {
         if codex {
             do { try HookInstaller.installCodex() }
             catch { errors.append("Codex: \(error.localizedDescription)") }
+        }
+        if cursor {
+            do { try HookInstaller.installCursor() }
+            catch { errors.append("Cursor: \(error.localizedDescription)") }
         }
         refresh()
         return errors.isEmpty ? nil : errors.joined(separator: "\n")
@@ -107,6 +113,8 @@ final class AppState: ObservableObject {
         catch { errors.append("Claude Code: \(error.localizedDescription)") }
         do { try HookInstaller.uninstallCodex() }
         catch { errors.append("Codex: \(error.localizedDescription)") }
+        do { try HookInstaller.uninstallCursor() }
+        catch { errors.append("Cursor: \(error.localizedDescription)") }
         refresh()
         return errors.isEmpty ? nil : errors.joined(separator: "\n")
     }

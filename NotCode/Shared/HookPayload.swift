@@ -7,7 +7,7 @@ struct AgentEvent {
         case done       // agent finished a task/turn
     }
 
-    var agent: String       // "Claude Code" | "Codex"
+    var agent: String       // "Claude Code" | "Codex" | "Cursor"
     var kind: Kind
     var detail: String?     // e.g. Claude's notification message or task summary
     var cwd: String?
@@ -73,5 +73,21 @@ enum HookPayload {
             detail: summary,
             cwd: object["cwd"] as? String,
             sessionID: object["turn-id"] as? String)
+    }
+
+    /// Cursor's stop hook passes JSON on stdin, e.g.
+    /// {"hook_event_name":"stop","status":"completed","conversation_id":"...",
+    ///  "workspace_roots":["/path"],"loop_count":0}
+    /// Returns nil for status "aborted" — the user cancelled the turn, so
+    /// they're at the machine and a ding would be noise.
+    static func parseCursor(json data: Data) -> AgentEvent? {
+        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        if object["status"] as? String == "aborted" { return nil }
+        return AgentEvent(
+            agent: "Cursor",
+            kind: .done,
+            detail: nil,
+            cwd: (object["workspace_roots"] as? [String])?.first,
+            sessionID: object["conversation_id"] as? String)
     }
 }

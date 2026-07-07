@@ -1,8 +1,10 @@
 import Foundation
 
-// notcode-hook — invoked by Claude Code hooks (JSON on stdin) and Codex's
-// notify config (JSON as the last argument). Must always exit 0 quickly so it
-// can never break or block an agent session.
+// notcode-hook — invoked by Claude Code hooks (JSON on stdin), Codex's
+// notify config (JSON as the last argument), and Cursor's stop hook (JSON on
+// stdin, via the ~/.cursor/notcode-hook.sh wrapper). Must always exit 0
+// quickly, and never write JSON to stdout — Cursor would interpret a
+// followup_message as an instruction to keep the agent going.
 
 func run() {
     let arguments = CommandLine.arguments
@@ -22,6 +24,9 @@ func run() {
     case "codex":
         let payload = arguments.count >= 3 ? Data(arguments[2].utf8) : Data()
         event = HookPayload.parseCodex(json: payload)
+    case "cursor":
+        let input = FileHandle.standardInput.readDataToEndOfFile()
+        event = HookPayload.parseCursor(json: input)
     case "test":
         event = AgentEvent(agent: "Claude Code", kind: .attention,
                            detail: "test notification from notcode-hook",

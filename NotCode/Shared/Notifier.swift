@@ -28,7 +28,8 @@ enum Notifier {
             default: break
             }
             if (event.agent == "Claude Code" && !config.claudeEnabled)
-                || (event.agent == "Codex" && !config.codexEnabled) {
+                || (event.agent == "Codex" && !config.codexEnabled)
+                || (event.agent == "Cursor" && !config.cursorEnabled) {
                 outcome.skippedReason = "agent disabled"
                 return outcome
             }

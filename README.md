@@ -5,7 +5,7 @@
 **Your AI agents work. You live your life. NotCode taps you on the shoulder when it matters.**
 
 A native macOS menu bar app that plays a sound on your Mac and sends you a **WhatsApp** when
-[Claude Code](https://claude.com/claude-code) or [Codex](https://developers.openai.com/codex) finishes a task or needs your attention.
+[Claude Code](https://claude.com/claude-code), [Codex](https://developers.openai.com/codex) or [Cursor](https://cursor.com) finishes a task or needs your attention.
 
 [![Latest release](https://img.shields.io/github/v/release/vadi25/notcode)](https://github.com/vadi25/notcode/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -25,9 +25,9 @@ You kick off a long agent run and walk away. Twenty minutes later it has been si
 - 🤫 **Silent while you're watching**: typing in your terminal or IDE? NotCode knows you can see the agent and stays quiet. One notification per conversation, never spam
 - 💸 **Message-frugal**: WhatsApp only sends when you've actually been away from the keyboard, and it carries status updates only, never your code or task output
 - 🪶 **Native Swift, ~5 MB**: no Electron, no background CPU, works even when the app isn't running
-- 🔌 **One-click hook install**: safely merges into `~/.claude/settings.json` and `~/.codex/config.toml` with backups, and plays nice with existing hooks (it chains, never overwrites)
+- 🔌 **One-click hook install**: safely merges into `~/.claude/settings.json`, `~/.codex/config.toml` and `~/.cursor/hooks.json` with backups, and plays nice with existing hooks (it chains, never overwrites)
 
-Works with **Claude Code** (CLI + desktop app) and **Codex** (CLI + desktop app).
+Works with **Claude Code** (CLI + desktop app), **Codex** (CLI + desktop app) and **Cursor** (via its [hooks](https://cursor.com/docs/hooks); Cursor reports task completion only, since it has no attention/permission hook).
 
 ## Install
 
@@ -52,8 +52,8 @@ NotCode's onboarding walks you through this, but here's the gist:
 
 ```
 Claude Code ─ Notification/Stop hooks ─┐
-                                       ├─▶ notcode-hook ──▶ 🔊 local sound
-Codex ──────── notify config ──────────┘   (helper CLI)└──▶ 📱 Kapso WhatsApp API
+Codex ──────── notify config ──────────┼─▶ notcode-hook ──▶ 🔊 local sound
+Cursor ─────── stop hook ──────────────┘   (helper CLI)└──▶ 📱 Kapso WhatsApp API
                                                ▲
 NotCode.app (menu bar) ── settings · onboarding · pause · hook installer
 ```

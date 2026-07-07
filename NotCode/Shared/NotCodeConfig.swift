@@ -30,6 +30,7 @@ struct NotCodeConfig: Codable, Equatable {
     var notifyDone: Bool = true
     var claudeEnabled: Bool = true
     var codexEnabled: Bool = true
+    var cursorEnabled: Bool = true
     /// Only send WhatsApp when no keyboard/mouse input for this long. 0 = always send.
     var awayOnlyWhatsApp: Bool = true
     var awayThresholdMinutes: Double = 2
@@ -66,6 +67,7 @@ struct NotCodeConfig: Codable, Equatable {
         notifyDone = try c.decodeIfPresent(Bool.self, forKey: .notifyDone) ?? d.notifyDone
         claudeEnabled = try c.decodeIfPresent(Bool.self, forKey: .claudeEnabled) ?? d.claudeEnabled
         codexEnabled = try c.decodeIfPresent(Bool.self, forKey: .codexEnabled) ?? d.codexEnabled
+        cursorEnabled = try c.decodeIfPresent(Bool.self, forKey: .cursorEnabled) ?? d.cursorEnabled
         awayOnlyWhatsApp = try c.decodeIfPresent(Bool.self, forKey: .awayOnlyWhatsApp) ?? d.awayOnlyWhatsApp
         awayThresholdMinutes = try c.decodeIfPresent(Double.self, forKey: .awayThresholdMinutes) ?? d.awayThresholdMinutes
         suppressWhileWatching = try c.decodeIfPresent(Bool.self, forKey: .suppressWhileWatching) ?? d.suppressWhileWatching

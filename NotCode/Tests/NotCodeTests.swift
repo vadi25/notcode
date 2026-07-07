@@ -55,6 +55,27 @@ final class HookPayloadTests: XCTestCase {
         XCTAssertNil(HookPayload.parseCodex(json: Data(json.utf8)))
     }
 
+    func testCursorStopParsing() {
+        let json = """
+        {"hook_event_name":"stop","status":"completed","conversation_id":"conv-1",
+         "workspace_roots":["/Users/me/projects/my-app"],"loop_count":0}
+        """
+        let event = HookPayload.parseCursor(json: Data(json.utf8))
+        XCTAssertEqual(event?.agent, "Cursor")
+        XCTAssertEqual(event?.kind, .done)
+        XCTAssertNil(event?.detail)
+        XCTAssertEqual(event?.sessionID, "conv-1")
+        XCTAssertEqual(event?.projectName, "my-app")
+    }
+
+    func testCursorAbortedIsSkipped() {
+        let json = #"{"hook_event_name":"stop","status":"aborted","conversation_id":"c"}"#
+        XCTAssertNil(HookPayload.parseCursor(json: Data(json.utf8)),
+                     "an aborted turn means the user is at the machine")
+        let errored = #"{"hook_event_name":"stop","status":"error","conversation_id":"c"}"#
+        XCTAssertNotNil(HookPayload.parseCursor(json: Data(errored.utf8)))
+    }
+
     func testWhatsAppTextFormats() {
         let attention = AgentEvent(agent: "Claude Code", kind: .attention,
                                    detail: "waiting for permission",
@@ -152,6 +173,48 @@ final class HookInstallerMergeTests: XCTestCase {
         XCTAssertTrue(script.hasPrefix("#!/bin/bash"))
         XCTAssertTrue(script.contains("'/Users/x/Sky Client.app/MacOS/SkyClient' 'turn-ended' \"$@\""))
         XCTAssertTrue(script.contains("notcode-hook' codex \"$@\""))
+    }
+
+    func testCursorMergeIntoEmptyHooks() {
+        let merged = HookInstaller.mergedCursorHooks(into: [:])
+        XCTAssertEqual(merged["version"] as? Int, 1)
+        let hooks = merged["hooks"] as? [String: Any]
+        let stop = hooks?["stop"] as? [[String: Any]]
+        XCTAssertEqual(stop?.count, 1)
+        XCTAssertTrue(stop?.first?["command"] as? String != nil
+                      && (stop!.first!["command"] as! String).contains("notcode-hook"))
+    }
+
+    func testCursorMergePreservesExistingHooks() {
+        let existing: [String: Any] = [
+            "version": 1,
+            "hooks": [
+                "stop": [["command": "./scripts/my-hook.sh"]],
+                "beforeShellExecution": [["command": "./scripts/audit.sh"]],
+            ],
+        ]
+        let merged = HookInstaller.mergedCursorHooks(into: existing)
+        let hooks = merged["hooks"] as! [String: Any]
+        XCTAssertNotNil(hooks["beforeShellExecution"], "unrelated hook events must survive")
+        let stop = hooks["stop"] as! [[String: Any]]
+        let commands = stop.compactMap { $0["command"] as? String }
+        XCTAssertEqual(stop.count, 2, "existing entry kept, ours appended")
+        XCTAssertTrue(commands.contains("./scripts/my-hook.sh"))
+        XCTAssertTrue(commands.contains { $0.contains("notcode-hook") })
+    }
+
+    func testCursorMergeIsIdempotent() {
+        let once = HookInstaller.mergedCursorHooks(into: [:])
+        let twice = HookInstaller.mergedCursorHooks(into: once)
+        let onceJSON = try! JSONSerialization.data(withJSONObject: once, options: .sortedKeys)
+        let twiceJSON = try! JSONSerialization.data(withJSONObject: twice, options: .sortedKeys)
+        XCTAssertEqual(onceJSON, twiceJSON)
+    }
+
+    func testCursorWrapperExecsHelper() {
+        let script = HookInstaller.cursorWrapperContent()
+        XCTAssertTrue(script.hasPrefix("#!/bin/bash"))
+        XCTAssertTrue(script.contains("notcode-hook' cursor"))
     }
 
     func testCodexRootNotifyDetection() {

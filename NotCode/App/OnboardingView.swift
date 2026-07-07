@@ -10,7 +10,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Welcome to NotCode 👋").font(.largeTitle.bold())
-                    Text("Get a sound on your Mac and a WhatsApp on your phone whenever Claude Code or Codex needs you — or finishes a task.")
+                    Text("Get a sound on your Mac and a WhatsApp on your phone whenever Claude Code, Codex or Cursor needs you — or finishes a task.")
                         .foregroundStyle(.secondary)
                 }
 
@@ -39,12 +39,13 @@ struct OnboardingView: View {
 
                 step(3, "Connect your agents") {
                     HStack {
-                        Button("Install Claude Code + Codex hooks") {
+                        Button("Install Claude Code + Codex + Cursor hooks") {
                             state.config.whatsAppEnabled = state.config.hasKapsoCredentials
-                            installMessage = state.installHooks(claude: true, codex: true)
+                            installMessage = state.installHooks(claude: true, codex: true, cursor: true)
                                 ?? "Hooks installed ✓"
                         }
-                        if state.claudeHooks == .installed && state.codexHooks == .installed {
+                        if state.claudeHooks == .installed && state.codexHooks == .installed
+                            && state.cursorHooks == .installed {
                             Label("Done", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                         }

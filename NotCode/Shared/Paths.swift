@@ -26,6 +26,15 @@ enum Paths {
     static var codexConfig: URL {
         home.appendingPathComponent(".codex/config.toml")
     }
+    static var cursorHooks: URL {
+        home.appendingPathComponent(".cursor/hooks.json")
+    }
+    /// Wrapper script registered in Cursor's hooks.json. It lives in ~/.cursor
+    /// (a space-free path) because the real helper sits under "Application
+    /// Support" and we don't know whether Cursor shell-parses the command.
+    static var cursorWrapper: URL {
+        home.appendingPathComponent(".cursor/notcode-hook.sh")
+    }
 
     static func ensureAppSupportExists() {
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
