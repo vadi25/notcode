@@ -45,20 +45,15 @@ struct WhatsAppSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Fallback template") {
-                TextField("Template name", text: $state.config.templateName)
-                TextField("Template language code", text: $state.config.templateLanguage)
-                Text("WhatsApp only allows free-form messages for 24h after your last reply to the bot. Create a template named like this with one {{1}} variable in the Kapso dashboard so alerts still arrive after the window closes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
                 Button("Send test message") { sendTest() }
                     .disabled(!state.config.hasKapsoCredentials)
                 if let sendResult {
                     Text(sendResult).font(.caption)
                 }
+                Text("WhatsApp delivers messages for 24h after your last message to the bot. If sends start failing, just text your Kapso number again (any message works) — the window reopens instantly.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -72,13 +67,11 @@ struct WhatsAppSettings: View {
                                      phoneNumberID: config.phoneNumberID)
             let result = client.sendText(
                 "NotCode is connected — you're all set 🎉",
-                to: config.recipientPhone,
-                templateName: config.templateName,
-                templateLanguage: config.templateLanguage)
+                to: config.recipientPhone)
             await MainActor.run {
                 switch result {
                 case .success: sendResult = "Delivered ✓ — check your WhatsApp"
-                case .failure(let error): sendResult = "Failed: \(error)"
+                case .failure(let error): sendResult = "Failed: \(error.userHint)"
                 }
             }
         }

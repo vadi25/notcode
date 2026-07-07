@@ -31,9 +31,9 @@ struct OnboardingView: View {
 
                 step(2, "Activate the conversation") {
                     Text("""
-                    From your phone, send **any message** (a simple "hi" works) to your new Kapso WhatsApp number. WhatsApp only lets the bot message you freely for 24h after your last message to it.
+                    From your phone, send **any message** (a simple "hi" works) to your new Kapso WhatsApp number. WhatsApp delivers the bot's messages for 24h after your last message to it — every reply from you resets the clock.
 
-                    For alerts that keep working after that window: create a template in the Kapso dashboard named **notcode_alert** with body `{{1}}` — NotCode falls back to it automatically.
+                    If alerts ever stop arriving, just text the number again and they resume instantly. NotCode shows this in the menu bar when it happens.
                     """)
                 }
 

@@ -54,14 +54,14 @@ enum Notifier {
 
         let client = KapsoClient(apiKey: config.kapsoAPIKey,
                                  phoneNumberID: config.phoneNumberID)
-        switch client.sendText(event.whatsAppText, to: config.recipientPhone,
-                               templateName: config.templateName,
-                               templateLanguage: config.templateLanguage) {
+        switch client.sendText(event.whatsAppText, to: config.recipientPhone) {
         case .success:
             outcome.whatsAppSent = true
+            StateStore.recordDeliveryProblem(nil)
             Log.append("whatsapp sent: \(event.whatsAppText)")
         case .failure(let error):
-            outcome.whatsAppError = String(describing: error)
+            outcome.whatsAppError = error.userHint
+            StateStore.recordDeliveryProblem(error.userHint)
             Log.append("whatsapp failed: \(error)")
         }
         return outcome

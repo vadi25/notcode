@@ -9,6 +9,9 @@ struct MenuView: View {
             if let last = state.lastNotification {
                 Text("Last: \(last)")
             }
+            if let problem = state.lastDeliveryProblem {
+                Text("⚠️ \(problem)")
+            }
 
             Divider()
 

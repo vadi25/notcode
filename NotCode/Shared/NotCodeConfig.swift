@@ -23,8 +23,6 @@ struct NotCodeConfig: Codable, Equatable {
     var kapsoAPIKey: String = ""
     var phoneNumberID: String = ""
     var recipientPhone: String = ""
-    var templateName: String = "notcode_alert"
-    var templateLanguage: String = "en_US"
 
     // Behavior
     var paused: Bool = false

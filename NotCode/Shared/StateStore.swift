@@ -6,6 +6,7 @@ struct NotCodeState: Codable {
     var recentEvents: [String: Date] = [:]        // dedupeKey → last fired
     var lastNotification: String?
     var lastNotificationDate: Date?
+    var lastDeliveryProblem: String?              // surfaced in the menu bar
     var sessions: [String: String] = [:]          // session_id → cwd (v2)
 }
 
@@ -47,5 +48,11 @@ enum StateStore {
         }
         save(state)
         return true
+    }
+
+    static func recordDeliveryProblem(_ problem: String?) {
+        var state = load()
+        state.lastDeliveryProblem = problem
+        save(state)
     }
 }

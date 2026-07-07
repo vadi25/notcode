@@ -17,12 +17,19 @@ struct KapsoClient {
             }
         }
 
-        /// Meta rejects free-form messages outside the 24h customer service
-        /// window (error 131047 "re-engagement message" and friends). Any 4xx
-        /// on a text send is worth retrying as a template.
-        var isWorthTemplateRetry: Bool {
-            if case .http(let status, _) = self { return (400..<500).contains(status) }
+        /// WhatsApp only delivers messages within 24h of the recipient's last
+        /// message to the number. The fix is on the phone, not in the app.
+        var isWindowClosed: Bool {
+            if case .http(_, let body) = self {
+                return body.contains("24-hour") || body.contains("131047")
+            }
             return false
+        }
+
+        var userHint: String {
+            isWindowClosed
+                ? "WhatsApp 24h window closed — send any message (e.g. \"hi\") to your Kapso number from your phone to reopen it"
+                : description
         }
     }
 
@@ -30,44 +37,14 @@ struct KapsoClient {
         URL(string: "https://api.kapso.ai/meta/whatsapp/v24.0/\(phoneNumberID)/messages")!
     }
 
-    /// Sends a free-form text message. Falls back to the configured template
-    /// when the 24h window is closed (if `templateName` is non-empty).
-    func sendText(_ body: String, to recipient: String,
-                  templateName: String, templateLanguage: String) -> Result<Void, SendError> {
+    /// Sends an individual free-form text message.
+    func sendText(_ body: String, to recipient: String) -> Result<Void, SendError> {
         let payload: [String: Any] = [
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": recipient,
             "type": "text",
             "text": ["body": body],
-        ]
-        let textResult = post(payload)
-        guard case .failure(let error) = textResult, error.isWorthTemplateRetry,
-              !templateName.isEmpty
-        else { return textResult }
-
-        Log.append("kapso: text send failed (\(error)), retrying as template '\(templateName)'")
-        return sendTemplate(templateName, language: templateLanguage,
-                            bodyParameter: body, to: recipient)
-    }
-
-    func sendTemplate(_ name: String, language: String, bodyParameter: String,
-                      to recipient: String) -> Result<Void, SendError> {
-        let payload: [String: Any] = [
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": recipient,
-            "type": "template",
-            "template": [
-                "name": name,
-                "language": ["code": language],
-                "components": [
-                    [
-                        "type": "body",
-                        "parameters": [["type": "text", "text": bodyParameter]],
-                    ]
-                ],
-            ],
         ]
         return post(payload)
     }

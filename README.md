@@ -38,7 +38,7 @@ First launch opens the onboarding guide:
 3. **Install hooks** — one click for Claude Code + Codex
 4. **Test** 🎉
 
-For alerts that keep working after 24h of silence, create a template named `notcode_alert` with body `{{1}}` in the Kapso dashboard — NotCode falls back to it automatically.
+NotCode sends plain individual messages only. WhatsApp delivers them for 24h after your last message to the bot; every message you send resets the clock. If the window closes, NotCode shows a warning in the menu bar — text your number again and alerts resume.
 
 ## Roadmap (v2)
 

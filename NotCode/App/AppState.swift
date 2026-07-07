@@ -8,6 +8,7 @@ final class AppState: ObservableObject {
     @Published var claudeHooks: HookInstaller.Status = .notInstalled
     @Published var codexHooks: HookInstaller.Status = .notInstalled
     @Published var lastNotification: String?
+    @Published var lastDeliveryProblem: String?
     @Published var testResult: String?
 
     init() {
@@ -20,6 +21,7 @@ final class AppState: ObservableObject {
         codexHooks = HookInstaller.codexStatus()
         let state = StateStore.load()
         lastNotification = state.lastNotification
+        lastDeliveryProblem = state.lastDeliveryProblem
     }
 
     func sendTestNotification() {
