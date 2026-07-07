@@ -175,7 +175,7 @@ struct BehaviorSettings: View {
             Section("Quiet while you work") {
                 Toggle("Skip notifications while I'm actively in a terminal or IDE",
                        isOn: $state.config.suppressWhileWatching)
-                Text("When you're typing in Terminal, iTerm, VS Code, Cursor, etc., you can see the agent finish — so NotCode stays silent. Step away or switch apps and notifications resume.")
+                Text("When you're typing in Terminal, iTerm, VS Code, etc., you can see the agent finish — so NotCode stays silent. Step away or switch apps and notifications resume. Cursor agent runs always notify: their panel can be hidden while you code, so you might miss the finish.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

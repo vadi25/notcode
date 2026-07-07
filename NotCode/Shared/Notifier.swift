@@ -33,7 +33,10 @@ enum Notifier {
                 outcome.skippedReason = "agent disabled"
                 return outcome
             }
-            if config.suppressWhileWatching,
+            // Cursor is exempt from the watching filter: its agent panel can be
+            // hidden while you code in the same window, so being in Cursor does
+            // not mean you saw the run finish (unlike a CLI in a terminal).
+            if config.suppressWhileWatching, event.agent != "Cursor",
                FocusDetector.userIsWatchingTerminal(
                    awayThresholdSeconds: config.awayThresholdMinutes * 60) {
                 outcome.skippedReason = "user is watching the terminal"
