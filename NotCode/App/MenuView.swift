@@ -28,10 +28,15 @@ struct MenuView: View {
 
             if let update = state.availableUpdate {
                 Divider()
-                Button(state.updating ? "Updating…" : "⬆️ Update to \(update)") {
-                    state.performUpdate()
+                if UpdateChecker.canSelfUpdate {
+                    Button(state.updating ? "Updating…" : "⬆️ Update to \(update)") {
+                        state.performUpdate()
+                    }
+                    .disabled(state.updating)
+                } else {
+                    Button("⬇️ Download \(update)…") { state.performUpdate() }
+                    Text("Auto-update is off for this build — opens the download page")
                 }
-                .disabled(state.updating)
             }
 
             Divider()
@@ -46,6 +51,8 @@ struct MenuView: View {
             Button("Setup Guide…") { AppDelegate.instance?.showOnboarding() }
 
             Divider()
+
+            Text("Version \(UpdateChecker.currentVersion)")
 
             Button("Quit NotCode") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
