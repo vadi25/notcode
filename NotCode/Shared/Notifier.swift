@@ -63,10 +63,15 @@ enum Notifier {
 
         let client = KapsoClient(apiKey: config.kapsoAPIKey,
                                  phoneNumberID: config.phoneNumberID)
-        switch client.sendText(event.whatsAppText, to: config.recipientPhone) {
+        var text = event.whatsAppText
+        if config.replyLoopEnabled {
+            text += "\n↩️ Reply to continue · \"help\" for options"
+        }
+        switch client.sendText(text, to: config.recipientPhone) {
         case .success:
             outcome.whatsAppSent = true
             StateStore.recordDeliveryProblem(nil)
+            StateStore.recordWhatsAppSent()
             Log.append("whatsapp sent: \(event.whatsAppText)")
         case .failure(let error):
             outcome.whatsAppError = error.userHint

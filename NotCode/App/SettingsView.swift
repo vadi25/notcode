@@ -45,6 +45,18 @@ struct WhatsAppSettings: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Reply from your phone (beta)") {
+                Toggle("Continue sessions by replying on WhatsApp",
+                       isOn: $state.config.replyLoopEnabled)
+                if state.config.replyLoopEnabled {
+                    Toggle("Include a short excerpt of the agent's answer",
+                           isOn: $state.config.replyExcerptEnabled)
+                }
+                Text("Reply to any notification to keep prompting that session, or use \"project-name: your message\" to target a specific one — text \"help\" to your Kapso number for a cheat sheet. Only messages from your own number are accepted, and remote runs never skip permission prompts. Needs the NotCode app running; Claude Code sessions continue as a headless branch, so the original terminal won't show remote turns.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Button("Send test message") { sendTest() }
                     .disabled(!state.config.hasKapsoCredentials)

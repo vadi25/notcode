@@ -3,8 +3,12 @@ import SwiftUI
 
 final class AppState: ObservableObject {
     @Published var config: NotCodeConfig {
-        didSet { try? ConfigStore.save(config) }
+        didSet {
+            try? ConfigStore.save(config)
+            Task { @MainActor in self.replyPoller.reconfigure(self.config) }
+        }
     }
+    let replyPoller = ReplyPoller()
     @Published var hookStatuses: [String: HookInstaller.Status] = [:]
     @Published var lastNotification: String?
     @Published var lastDeliveryProblem: String?
@@ -17,6 +21,7 @@ final class AppState: ObservableObject {
     init() {
         config = ConfigStore.load()
         refresh()
+        Task { @MainActor in self.replyPoller.reconfigure(self.config) }
         checkForUpdates()
         updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
             self?.checkForUpdates()

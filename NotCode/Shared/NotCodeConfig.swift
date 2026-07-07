@@ -38,6 +38,12 @@ struct NotCodeConfig: Codable, Equatable {
     /// they're watching the agent, so every turn-end ding is noise.
     var suppressWhileWatching: Bool = true
 
+    // Reply loop (beta): drive sessions by replying on WhatsApp.
+    var replyLoopEnabled: Bool = false
+    /// Include a short excerpt of the agent's answer in the completion
+    /// message. Off by default: the privacy stance is status-only.
+    var replyExcerptEnabled: Bool = false
+
     // Sounds
     var soundAttention: SoundChoice = .defaultAttention
     var soundDone: SoundChoice = .defaultDone
@@ -95,6 +101,8 @@ struct NotCodeConfig: Codable, Equatable {
         awayOnlyWhatsApp = try c.decodeIfPresent(Bool.self, forKey: .awayOnlyWhatsApp) ?? d.awayOnlyWhatsApp
         awayThresholdMinutes = try c.decodeIfPresent(Double.self, forKey: .awayThresholdMinutes) ?? d.awayThresholdMinutes
         suppressWhileWatching = try c.decodeIfPresent(Bool.self, forKey: .suppressWhileWatching) ?? d.suppressWhileWatching
+        replyLoopEnabled = try c.decodeIfPresent(Bool.self, forKey: .replyLoopEnabled) ?? d.replyLoopEnabled
+        replyExcerptEnabled = try c.decodeIfPresent(Bool.self, forKey: .replyExcerptEnabled) ?? d.replyExcerptEnabled
         soundAttention = try c.decodeIfPresent(SoundChoice.self, forKey: .soundAttention) ?? d.soundAttention
         soundDone = try c.decodeIfPresent(SoundChoice.self, forKey: .soundDone) ?? d.soundDone
         soundOverrides = try c.decodeIfPresent([String: SoundChoice].self, forKey: .soundOverrides) ?? d.soundOverrides

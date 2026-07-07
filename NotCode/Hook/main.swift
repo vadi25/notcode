@@ -6,6 +6,13 @@ import Foundation
 // instruction to keep the agent going.
 
 func run() {
+    // Runs launched by the reply loop set this; their outcome is reported by
+    // the poller itself, so the agent's own hooks must stay quiet or every
+    // remote reply would double-notify.
+    if ProcessInfo.processInfo.environment["NOTCODE_REMOTE_RUN"] == "1" {
+        Log.append("hook: remote-run session, staying quiet")
+        return
+    }
     let arguments = CommandLine.arguments
     guard arguments.count >= 2 else {
         Log.append("hook: missing subcommand")

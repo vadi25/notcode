@@ -261,6 +261,107 @@ final class VersionCompareTests: XCTestCase {
     }
 }
 
+final class ReplyRouterTests: XCTestCase {
+    private func sessions(_ entries: [(id: String, cwd: String?, agent: String, age: TimeInterval)])
+        -> [String: SessionInfo] {
+        Dictionary(uniqueKeysWithValues: entries.map {
+            ($0.id, SessionInfo(cwd: $0.cwd, agent: $0.agent,
+                                lastNotified: Date().addingTimeInterval(-$0.age)))
+        })
+    }
+
+    func testBareReplyGoesToMostRecentSession() {
+        let s = sessions([("old", "/x/api-server", "Codex", 600),
+                          ("new", "/x/my-app", "Claude Code", 10)])
+        XCTAssertEqual(ReplyRouter.route(text: "keep going", sessions: s),
+                       .session(id: "new", prompt: "keep going"))
+    }
+
+    func testPrefixRoutesToMatchingProjectCaseInsensitively() {
+        let s = sessions([("a", "/x/api-server", "Codex", 600),
+                          ("b", "/x/my-app", "Claude Code", 10)])
+        XCTAssertEqual(ReplyRouter.route(text: "API-Server: run the tests", sessions: s),
+                       .session(id: "a", prompt: "run the tests"))
+    }
+
+    func testUnknownSingleTokenPrefixIsNotFound() {
+        let s = sessions([("a", "/x/my-app", "Claude Code", 10)])
+        XCTAssertEqual(ReplyRouter.route(text: "my-ap: do x", sessions: s),
+                       .notFound(prefix: "my-ap"))
+    }
+
+    func testColonInsideSentenceIsNotRouting() {
+        let s = sessions([("a", "/x/my-app", "Claude Code", 10)])
+        XCTAssertEqual(ReplyRouter.route(text: "fix this: the button is broken", sessions: s),
+                       .session(id: "a", prompt: "fix this: the button is broken"),
+                       "a multi-word prefix is part of the message, not routing")
+    }
+
+    func testHelpAndNoSessions() {
+        XCTAssertEqual(ReplyRouter.route(text: " HELP ", sessions: [:]), .help)
+        XCTAssertEqual(ReplyRouter.route(text: "?", sessions: [:]), .help)
+        XCTAssertEqual(ReplyRouter.route(text: "hello", sessions: [:]), .noSessions)
+        let s = sessions([("a", "/x/my-app", "Claude Code", 10)])
+        XCTAssertTrue(ReplyRouter.helpText(sessions: s).contains("*my-app*"))
+    }
+}
+
+final class CodexResumeTests: XCTestCase {
+    func testSessionIDFromRolloutFilename() {
+        XCTAssertEqual(
+            CodexAgent.sessionID(
+                fromRolloutFilename: "rollout-2026-07-07T12-52-52-019f3d48-3e18-7741-b6ad-1268e62b321e.jsonl"),
+            "019f3d48-3e18-7741-b6ad-1268e62b321e")
+        XCTAssertNil(CodexAgent.sessionID(fromRolloutFilename: "rollout-notauuid.jsonl"))
+        XCTAssertNil(CodexAgent.sessionID(fromRolloutFilename: "whatever.txt"))
+    }
+
+    func testResolveSessionIDByTurnIDContent() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-resolve-test-\(UUID().uuidString)/2026/07/07")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let sessionUUID = "019f3d48-3e18-7741-b6ad-1268e62b321e"
+        let turnID = "019f3d48-3ea5-77d2-ad0a-c01ef6cb0772"
+        let rollout = dir.appendingPathComponent("rollout-2026-07-07T12-52-52-\(sessionUUID).jsonl")
+        try #"{"type":"turn","payload":{"id":"\#(turnID)"}}"#
+            .write(to: rollout, atomically: true, encoding: .utf8)
+
+        let root = dir.deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        XCTAssertEqual(CodexAgent.resolveSessionID(containing: turnID, sessionsDir: root),
+                       sessionUUID, "turn-id resolves via rollout content")
+        XCTAssertEqual(CodexAgent.resolveSessionID(containing: sessionUUID, sessionsDir: root),
+                       sessionUUID, "a real session id resolves via the filename")
+        XCTAssertNil(CodexAgent.resolveSessionID(containing: "not-there", sessionsDir: root))
+    }
+}
+
+final class KapsoParsingTests: XCTestCase {
+    func testParseInboundMessages() {
+        let json = """
+        {"data":[
+          {"id":"wamid.2","from":"34600111222","timestamp":"1700000060",
+           "type":"text","text":{"body":"second"}},
+          {"id":"wamid.1","from":"34600111222","timestamp":"1700000000",
+           "type":"text","text":{"body":"first"}},
+          {"id":"wamid.3","from":"34600111222","timestamp":"1700000090","type":"image"}
+        ]}
+        """
+        let messages = KapsoClient.parseInboundMessages(Data(json.utf8))
+        XCTAssertEqual(messages.map(\.text), ["first", "second"],
+                       "sorted oldest-first; non-text messages skipped")
+        XCTAssertEqual(messages.first?.timestamp, Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
+    func testPhoneMatchingIgnoresFormatting() {
+        XCTAssertTrue(KapsoClient.phoneMatches("+34 600-111-222", "34600111222"))
+        XCTAssertFalse(KapsoClient.phoneMatches("34600111223", "34600111222"))
+        XCTAssertFalse(KapsoClient.phoneMatches("", ""), "empty never matches")
+    }
+}
+
 final class HardeningTests: XCTestCase {
     func testKapsoEndpointNeverCrashesOnBadPhoneNumberID() {
         XCTAssertNil(KapsoClient(apiKey: "k", phoneNumberID: "").endpoint)

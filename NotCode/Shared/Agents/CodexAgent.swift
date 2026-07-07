@@ -196,7 +196,73 @@ struct CodexAgent: AgentModule {
     }
 
     // MARK: - Remote resume
-    // `codex exec resume <session-id>` exists, but the notify payload carries
-    // a turn-id whose relationship to the session id is unverified. Until the
-    // investigation lands, the default unavailable implementation applies.
+    // The notify payload identifies a *turn*, not the session. Rollout files
+    // under ~/.codex/sessions record their turn ids, so we translate by
+    // searching recent rollouts and taking the session UUID from the filename
+    // (rollout-<timestamp>-<uuid>.jsonl). Verified: `codex exec resume <uuid>`
+    // continues that rollout in place, so the same turn-id keeps resolving for
+    // follow-up replies.
+
+    func resumeAvailability() -> ResumeAvailability {
+        loginShellWhich("codex")
+            ? .available
+            : .unavailable(reason: "the codex CLI isn't on this Mac's PATH")
+    }
+
+    func resumeCommand(sessionID: String, prompt: String) -> String? {
+        guard let real = Self.resolveSessionID(containing: sessionID) else { return nil }
+        // --output-last-message keeps stdout to just the final answer; the
+        // event stream goes to /dev/null.
+        return "f=$(mktemp) && codex exec resume \(HookInstaller.shellEscape(real)) "
+            + "-o \"$f\" \(HookInstaller.shellEscape(prompt)) >/dev/null 2>&1; "
+            + "s=$?; cat \"$f\"; rm -f \"$f\"; exit $s"
+    }
+
+    func parseResumeOutput(stdout: Data) -> ResumeResult {
+        let text = String(data: stdout, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return ResumeResult(excerpt: text.isEmpty ? nil : text, newSessionID: nil)
+    }
+
+    /// Finds the session whose rollout mentions (or is named after) `id`.
+    static func resolveSessionID(
+        containing id: String,
+        sessionsDir: URL = Paths.home.appendingPathComponent(".codex/sessions")
+    ) -> String? {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: sessionsDir, includingPropertiesForKeys: [.contentModificationDateKey])
+        else { return nil }
+
+        var candidates: [(url: URL, modified: Date)] = []
+        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            let modified = (try? url.resourceValues(
+                forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            // Only sessions recent enough to still be reply targets.
+            if Date().timeIntervalSince(modified) < StateStore.sessionRetention * 2 {
+                candidates.append((url, modified))
+            }
+        }
+        candidates.sort { $0.modified > $1.modified }
+
+        if let hit = candidates.first(where: { $0.url.lastPathComponent.contains(id) }) {
+            return sessionID(fromRolloutFilename: hit.url.lastPathComponent)
+        }
+        for candidate in candidates.prefix(100) {
+            if let text = try? String(contentsOf: candidate.url, encoding: .utf8),
+               text.contains(id) {
+                return sessionID(fromRolloutFilename: candidate.url.lastPathComponent)
+            }
+        }
+        return nil
+    }
+
+    /// rollout-2026-07-07T12-52-52-<uuid>.jsonl → <uuid>
+    static func sessionID(fromRolloutFilename name: String) -> String? {
+        guard name.hasSuffix(".jsonl") else { return nil }
+        let stem = name.dropLast(".jsonl".count)
+        guard stem.count >= 36 else { return nil }
+        let uuid = String(stem.suffix(36))
+        return UUID(uuidString: uuid) != nil ? uuid.lowercased() : nil
+    }
 }

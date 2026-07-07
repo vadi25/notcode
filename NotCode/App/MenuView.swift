@@ -6,6 +6,9 @@ struct MenuView: View {
     var body: some View {
         Group {
             Text(state.config.paused ? "NotCode — Paused" : "NotCode — Active")
+            if let project = state.replyPoller.activeRun {
+                Text("▶️ Remote reply running in \(project)")
+            }
             if let last = state.lastNotification {
                 Text("Last: \(last)")
             }
