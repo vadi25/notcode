@@ -33,8 +33,14 @@ struct KapsoClient {
         }
     }
 
-    private var endpoint: URL {
-        URL(string: "https://api.kapso.ai/meta/whatsapp/v24.0/\(phoneNumberID)/messages")!
+    /// nil when the phone number ID can't form a valid URL — the helper must
+    /// return an error for that, never crash on a force-unwrap.
+    var endpoint: URL? {
+        let id = phoneNumberID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty,
+              let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else { return nil }
+        return URL(string: "https://api.kapso.ai/meta/whatsapp/v24.0/\(encoded)/messages")
     }
 
     /// Sends an individual free-form text message.
@@ -52,6 +58,9 @@ struct KapsoClient {
     /// Synchronous POST with a short timeout — the hook helper is a
     /// short-lived process and must never hang an agent session.
     private func post(_ payload: [String: Any]) -> Result<Void, SendError> {
+        guard let endpoint else {
+            return .failure(.transport("invalid WhatsApp phone number ID — check it in Settings"))
+        }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 5

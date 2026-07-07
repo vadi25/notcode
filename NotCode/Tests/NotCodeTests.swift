@@ -240,6 +240,30 @@ final class VersionCompareTests: XCTestCase {
     }
 }
 
+final class HardeningTests: XCTestCase {
+    func testKapsoEndpointNeverCrashesOnBadPhoneNumberID() {
+        XCTAssertNil(KapsoClient(apiKey: "k", phoneNumberID: "").endpoint)
+        XCTAssertNil(KapsoClient(apiKey: "k", phoneNumberID: "  \n ").endpoint)
+
+        let spaced = KapsoClient(apiKey: "k", phoneNumberID: "123 456").endpoint
+        XCTAssertEqual(spaced?.absoluteString,
+                       "https://api.kapso.ai/meta/whatsapp/v24.0/123%20456/messages")
+
+        let normal = KapsoClient(apiKey: "k", phoneNumberID: "123456789").endpoint
+        XCTAssertEqual(normal?.absoluteString,
+                       "https://api.kapso.ai/meta/whatsapp/v24.0/123456789/messages")
+    }
+
+    func testLogSanitizationStripsControlCharacters() {
+        XCTAssertEqual(Log.sanitized("plain message 🎉"), "plain message 🎉")
+        XCTAssertEqual(Log.sanitized("forged\nnew line"), "forged new line",
+                       "newlines must not create fake log entries")
+        XCTAssertEqual(Log.sanitized("evil\u{1B}[2Jclear"), "evil [2Jclear",
+                       "ANSI escapes must be neutralized")
+        XCTAssertEqual(Log.sanitized("tab\tbell\u{07}"), "tab bell ")
+    }
+}
+
 final class ConfigTests: XCTestCase {
     func testConfigRoundTrip() throws {
         var config = NotCodeConfig()

@@ -37,7 +37,13 @@ enum UpdateChecker {
     /// Downloads the latest DMG, then hands off to a detached script that
     /// waits for this process to exit, swaps the app, and relaunches it.
     static func downloadAndInstall() async throws {
-        let (tmpDMG, _) = try await URLSession.shared.download(from: dmgURL)
+        let (tmpDMG, response) = try await URLSession.shared.download(from: dmgURL)
+        if let status = (response as? HTTPURLResponse)?.statusCode,
+           !(200..<300).contains(status) {
+            throw NSError(domain: "NotCode", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "download failed (HTTP \(status))"
+            ])
+        }
         let dmg = FileManager.default.temporaryDirectory
             .appendingPathComponent("NotCode-update.dmg")
         try? FileManager.default.removeItem(at: dmg)
@@ -67,6 +73,14 @@ enum UpdateChecker {
         # Wait for NotCode to fully quit.
         for _ in $(seq 1 20); do pgrep -x NotCode >/dev/null || break; sleep 0.5; done
         MOUNT=$(hdiutil attach '\(dmgPath)' -nobrowse -readonly | awk -F'\\t' '/\\/Volumes\\//{print $NF; exit}')
+        # Never remove the installed app until the replacement is confirmed
+        # present — a bad download must not leave the user with nothing.
+        if [ ! -d "$MOUNT/NotCode.app" ]; then
+            hdiutil detach "$MOUNT" -quiet || true
+            rm -f '\(dmgPath)'
+            open /Applications/NotCode.app
+            exit 1
+        fi
         rm -rf /Applications/NotCode.app
         cp -R "$MOUNT/NotCode.app" /Applications/
         hdiutil detach "$MOUNT" -quiet || true

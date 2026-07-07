@@ -26,6 +26,10 @@ enum StateStore {
         encoder.outputFormatting = .sortedKeys
         if let data = try? encoder.encode(state) {
             try? data.write(to: Paths.state, options: .atomic)
+            // Holds the last notification text and session → project paths;
+            // keep it owner-readable like config.json.
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600], ofItemAtPath: Paths.state.path)
         }
     }
 

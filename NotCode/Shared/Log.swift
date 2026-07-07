@@ -10,7 +10,7 @@ enum Log {
         try? fm.createDirectory(at: Paths.logsDir, withIntermediateDirectories: true)
 
         let stamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(stamp)] \(message)\n"
+        let line = "[\(stamp)] \(sanitized(message))\n"
 
         if let size = (try? fm.attributesOfItem(atPath: Paths.logFile.path)[.size]) as? Int,
            size > maxSize {
@@ -24,5 +24,14 @@ enum Log {
         } else {
             try? Data(line.utf8).write(to: Paths.logFile)
         }
+    }
+
+    /// Messages can embed agent-controlled text (e.g. Claude's notification
+    /// message). Strip control characters so crafted input can't forge log
+    /// lines or emit terminal escape sequences when the log is cat'ed.
+    static func sanitized(_ message: String) -> String {
+        String(message.unicodeScalars.map {
+            CharacterSet.controlCharacters.contains($0) ? " " : Character($0)
+        })
     }
 }
