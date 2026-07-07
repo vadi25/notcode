@@ -32,6 +32,12 @@ enum Notifier {
                 outcome.skippedReason = "agent disabled"
                 return outcome
             }
+            if config.suppressWhileWatching,
+               FocusDetector.userIsWatchingTerminal(
+                   awayThresholdSeconds: config.awayThresholdMinutes * 60) {
+                outcome.skippedReason = "user is watching the terminal"
+                return outcome
+            }
             if !StateStore.shouldFire(event) {
                 outcome.skippedReason = "rate limited"
                 return outcome

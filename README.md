@@ -4,6 +4,7 @@ Never babysit your terminal again. NotCode is a native macOS menu bar app that p
 
 - 🔊 Local sounds: bundled funny/loud alerts, any macOS system sound, or your own audio file
 - 📱 WhatsApp notifications via [Kapso](https://kapso.com) — status updates only, never task output
+- 🧠 One notification per conversation: silent while you're actively working in a terminal/IDE, deduped per session, hook-continuation double-fires filtered out
 - 🧠 Smart economy: WhatsApp only sends when you've actually been away from the keyboard
 - ⚙️ One-click hook install for `~/.claude/settings.json` and `~/.codex/config.toml` (with backups)
 - 🪶 Tiny native Swift app; notifications work even when the app isn't running

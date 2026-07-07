@@ -33,6 +33,9 @@ struct NotCodeConfig: Codable, Equatable {
     /// Only send WhatsApp when no keyboard/mouse input for this long. 0 = always send.
     var awayOnlyWhatsApp: Bool = true
     var awayThresholdMinutes: Double = 2
+    /// Skip all notifications while the user is actively in a terminal/IDE —
+    /// they're watching the agent, so every turn-end ding is noise.
+    var suppressWhileWatching: Bool = true
 
     // Sounds
     var soundAttention: SoundChoice = .defaultAttention
@@ -44,6 +47,32 @@ struct NotCodeConfig: Codable, Equatable {
 
     var hasKapsoCredentials: Bool {
         !kapsoAPIKey.isEmpty && !phoneNumberID.isEmpty && !recipientPhone.isEmpty
+    }
+
+    init() {}
+
+    /// Tolerant decoding: any key missing from an older config.json keeps its
+    /// default instead of failing the whole file (which would silently reset
+    /// the user's credentials whenever we add a setting).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = NotCodeConfig()
+        whatsAppEnabled = try c.decodeIfPresent(Bool.self, forKey: .whatsAppEnabled) ?? d.whatsAppEnabled
+        kapsoAPIKey = try c.decodeIfPresent(String.self, forKey: .kapsoAPIKey) ?? d.kapsoAPIKey
+        phoneNumberID = try c.decodeIfPresent(String.self, forKey: .phoneNumberID) ?? d.phoneNumberID
+        recipientPhone = try c.decodeIfPresent(String.self, forKey: .recipientPhone) ?? d.recipientPhone
+        paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? d.paused
+        notifyAttention = try c.decodeIfPresent(Bool.self, forKey: .notifyAttention) ?? d.notifyAttention
+        notifyDone = try c.decodeIfPresent(Bool.self, forKey: .notifyDone) ?? d.notifyDone
+        claudeEnabled = try c.decodeIfPresent(Bool.self, forKey: .claudeEnabled) ?? d.claudeEnabled
+        codexEnabled = try c.decodeIfPresent(Bool.self, forKey: .codexEnabled) ?? d.codexEnabled
+        awayOnlyWhatsApp = try c.decodeIfPresent(Bool.self, forKey: .awayOnlyWhatsApp) ?? d.awayOnlyWhatsApp
+        awayThresholdMinutes = try c.decodeIfPresent(Double.self, forKey: .awayThresholdMinutes) ?? d.awayThresholdMinutes
+        suppressWhileWatching = try c.decodeIfPresent(Bool.self, forKey: .suppressWhileWatching) ?? d.suppressWhileWatching
+        soundAttention = try c.decodeIfPresent(SoundChoice.self, forKey: .soundAttention) ?? d.soundAttention
+        soundDone = try c.decodeIfPresent(SoundChoice.self, forKey: .soundDone) ?? d.soundDone
+        volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? d.volume
+        onboardingCompleted = try c.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? d.onboardingCompleted
     }
 }
 

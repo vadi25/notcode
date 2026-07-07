@@ -11,7 +11,7 @@ struct NotCodeState: Codable {
 }
 
 enum StateStore {
-    static let rateLimitWindow: TimeInterval = 30
+    static let rateLimitWindow: TimeInterval = 60
 
     static func load() -> NotCodeState {
         guard let data = try? Data(contentsOf: Paths.state),

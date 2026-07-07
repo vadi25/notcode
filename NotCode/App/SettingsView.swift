@@ -171,6 +171,14 @@ struct BehaviorSettings: View {
                 Toggle("Codex", isOn: $state.config.codexEnabled)
             }
 
+            Section("Quiet while you work") {
+                Toggle("Skip notifications while I'm actively in a terminal or IDE",
+                       isOn: $state.config.suppressWhileWatching)
+                Text("When you're typing in Terminal, iTerm, VS Code, Cursor, etc., you can see the agent finish — so NotCode stays silent. Step away or switch apps and notifications resume.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("WhatsApp economy") {
                 Toggle("Only send WhatsApp when I'm away from the Mac",
                        isOn: $state.config.awayOnlyWhatsApp)

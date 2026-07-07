@@ -40,8 +40,13 @@ struct AgentEvent {
 enum HookPayload {
     /// Claude Code hooks pass JSON on stdin, e.g.
     /// {"session_id":"...","cwd":"...","hook_event_name":"Notification","message":"..."}
-    static func parseClaude(kind: AgentEvent.Kind, json data: Data) -> AgentEvent {
+    /// Returns nil for Stop events re-fired by hook-forced continuations
+    /// (stop_hook_active) — notifying those would duplicate the real stop.
+    static func parseClaude(kind: AgentEvent.Kind, json data: Data) -> AgentEvent? {
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        if kind == .done, object["stop_hook_active"] as? Bool == true {
+            return nil
+        }
         return AgentEvent(
             agent: "Claude Code",
             kind: kind,

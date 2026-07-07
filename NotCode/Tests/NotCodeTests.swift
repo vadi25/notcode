@@ -8,24 +8,31 @@ final class HookPayloadTests: XCTestCase {
          "message":"Claude needs your permission to use Bash"}
         """
         let event = HookPayload.parseClaude(kind: .attention, json: Data(json.utf8))
-        XCTAssertEqual(event.agent, "Claude Code")
-        XCTAssertEqual(event.kind, .attention)
-        XCTAssertEqual(event.detail, "Claude needs your permission to use Bash")
-        XCTAssertEqual(event.sessionID, "abc123")
-        XCTAssertEqual(event.projectName, "my-app")
+        XCTAssertEqual(event?.agent, "Claude Code")
+        XCTAssertEqual(event?.kind, .attention)
+        XCTAssertEqual(event?.detail, "Claude needs your permission to use Bash")
+        XCTAssertEqual(event?.sessionID, "abc123")
+        XCTAssertEqual(event?.projectName, "my-app")
     }
 
     func testClaudeStopParsing() {
         let json = #"{"session_id":"abc","cwd":"/tmp/demo","hook_event_name":"Stop"}"#
         let event = HookPayload.parseClaude(kind: .done, json: Data(json.utf8))
-        XCTAssertEqual(event.kind, .done)
-        XCTAssertNil(event.detail)
+        XCTAssertEqual(event?.kind, .done)
+        XCTAssertNil(event?.detail)
+    }
+
+    func testStopHookActiveIsSkipped() {
+        let json = #"{"session_id":"abc","cwd":"/tmp","stop_hook_active":true}"#
+        XCTAssertNil(HookPayload.parseClaude(kind: .done, json: Data(json.utf8)),
+                     "hook-forced continuations must not notify twice")
+        XCTAssertNotNil(HookPayload.parseClaude(kind: .attention, json: Data(json.utf8)))
     }
 
     func testClaudeGarbageInputStillProducesEvent() {
         let event = HookPayload.parseClaude(kind: .attention, json: Data("not json".utf8))
-        XCTAssertEqual(event.agent, "Claude Code")
-        XCTAssertNil(event.cwd)
+        XCTAssertEqual(event?.agent, "Claude Code")
+        XCTAssertNil(event?.cwd)
     }
 
     func testCodexTurnCompleteParsing() {
@@ -158,6 +165,19 @@ final class ConfigTests: XCTestCase {
         let data = try JSONEncoder().encode(config)
         let decoded = try JSONDecoder().decode(NotCodeConfig.self, from: data)
         XCTAssertEqual(decoded, config)
+    }
+
+    func testDecodingOldConfigWithMissingKeysKeepsCredentials() throws {
+        // A config written before suppressWhileWatching existed.
+        let old = """
+        {"kapsoAPIKey":"secret","phoneNumberID":"123","recipientPhone":"34600111222",
+         "whatsAppEnabled":true,"notifyAttention":false}
+        """
+        let decoded = try JSONDecoder().decode(NotCodeConfig.self, from: Data(old.utf8))
+        XCTAssertEqual(decoded.kapsoAPIKey, "secret")
+        XCTAssertEqual(decoded.recipientPhone, "34600111222")
+        XCTAssertFalse(decoded.notifyAttention)
+        XCTAssertTrue(decoded.suppressWhileWatching, "new fields fall back to defaults")
     }
 
     func testHasKapsoCredentials() {
