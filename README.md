@@ -1,57 +1,97 @@
-# NotCode 🔔
+<div align="center">
 
-Never babysit your terminal again. NotCode is a native macOS menu bar app that plays a sound on your Mac and sends you a WhatsApp message when **Claude Code** or **Codex** needs your attention — or finishes a task.
+# 🔔 NotCode
 
-- 🔊 Local sounds: bundled funny/loud alerts, any macOS system sound, or your own audio file
-- 📱 WhatsApp notifications via [Kapso](https://kapso.com) — status updates only, never task output
-- 🧠 One notification per conversation: silent while you're actively working in a terminal/IDE, deduped per session, hook-continuation double-fires filtered out
-- 🧠 Smart economy: WhatsApp only sends when you've actually been away from the keyboard
-- ⚙️ One-click hook install for `~/.claude/settings.json` and `~/.codex/config.toml` (with backups)
-- 🪶 Tiny native Swift app; notifications work even when the app isn't running
+**Your AI agents work. You live your life. NotCode taps you on the shoulder when it matters.**
+
+A native macOS menu bar app that plays a sound on your Mac and sends you a **WhatsApp** when
+[Claude Code](https://claude.com/claude-code) or [Codex](https://developers.openai.com/codex) finishes a task or needs your attention.
+
+[![Latest release](https://img.shields.io/github/v/release/vadi25/notcode)](https://github.com/vadi25/notcode/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
+![Swift](https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white)
+
+**[⬇️ Download](https://notcode.rairai.xyz)** · [Latest DMG](https://github.com/vadi25/notcode/releases/latest/download/NotCode.dmg) · [Setup](#setup) · [How it works](#how-it-works)
+
+</div>
+
+---
+
+You kick off a long agent run and walk away. Twenty minutes later it's been sitting there waiting for a permission click, and you're in the kitchen. NotCode fixes that loop:
+
+- 📱 **WhatsApp on your phone** — "✅ Claude Code finished in *my-app*" — wherever you are
+- 🔊 **A sound on your Mac** — from a gentle ping to a full siren, any system sound, or your own audio file
+- 🤫 **Silent while you're watching** — typing in your terminal/IDE? NotCode knows you can see the agent and stays quiet. One notification per conversation, never spam
+- 💸 **Message-frugal** — WhatsApp only sends when you've actually been away from the keyboard; status updates only, never your code or task output
+- 🪶 **Native Swift, ~5 MB** — no Electron, no background CPU, works even when the app isn't running
+- 🔌 **One-click hook install** — safely merges into `~/.claude/settings.json` and `~/.codex/config.toml` with backups; plays nice with existing hooks (it chains, never overwrites)
+
+Works with **Claude Code** (CLI + desktop app) and **Codex** (CLI + desktop app).
+
+## Install
+
+1. Download the DMG from **[notcode.rairai.xyz](https://notcode.rairai.xyz)** (or grab the [latest release](https://github.com/vadi25/notcode/releases/latest/download/NotCode.dmg))
+2. Drag **NotCode** to Applications and open it
+3. First launch on an unsigned build: macOS will balk. Go to **System Settings → Privacy & Security → "Open Anyway"** (one time only — we're an open-source app without Apple's $99/yr notarization, for now)
+
+## Setup
+
+NotCode's onboarding walks you through this, but here's the gist:
+
+1. **Get a WhatsApp API number** — free at [kapso.com](https://kapso.com): sign up, connect a WhatsApp number, then copy your **API key** (Project Settings → API Keys) and the **phone number ID**
+2. **Paste both + your phone number** into NotCode
+3. **Text "hi" to your new number** from your phone — WhatsApp delivers bot messages for 24h after your last message to it, and every text you send resets the clock. If alerts ever pause, text it again; NotCode shows a menu bar warning when that happens
+4. **Click "Install hooks"** — done. Run any agent task and go make coffee ☕
 
 ## How it works
 
 ```
-Claude Code / Codex ──hook──▶ notcode-hook (helper CLI) ──▶ 🔊 sound
-                                                        └─▶ 📱 Kapso WhatsApp API
-NotCode.app (menu bar) ──▶ settings, onboarding, hook install, pause
+Claude Code ─ Notification/Stop hooks ─┐
+                                       ├─▶ notcode-hook ──▶ 🔊 local sound
+Codex ──────── notify config ──────────┘   (helper CLI)└──▶ 📱 Kapso WhatsApp API
+                                               ▲
+NotCode.app (menu bar) ── settings · onboarding · pause · hook installer
 ```
 
-The app installs a tiny helper at `~/Library/Application Support/NotCode/notcode-hook`. Claude Code's `Notification` and `Stop` hooks and Codex's `notify` config call it directly, so alerts fire even if the menu bar app is closed.
+The app installs a tiny helper at `~/Library/Application Support/NotCode/` and points the agents' own hook mechanisms at it. That means **notifications fire even if the menu bar app is closed** — the app is just the control panel.
 
-## Build
+Before notifying, the helper checks, in order: paused? → event type enabled? → are you actively in a terminal/IDE (then you're watching — stay silent)? → did this session already notify in the last 60s? → sound. WhatsApp additionally requires you to have been away from the keyboard (2 min by default, configurable).
+
+## Build from source
 
 ```bash
 brew install xcodegen
+git clone https://github.com/vadi25/notcode.git && cd notcode
 xcodegen
-xcodebuild -project NotCode.xcodeproj -scheme NotCode -configuration Debug build
-open build/Build/Products/Debug/NotCode.app   # with -derivedDataPath build
+xcodebuild -project NotCode.xcodeproj -scheme NotCode -configuration Debug -derivedDataPath build build
+open build/Build/Products/Debug/NotCode.app
 ```
 
-Run tests: `xcodebuild -project NotCode.xcodeproj -scheme NotCode test`
+Tests: `xcodebuild -project NotCode.xcodeproj -scheme NotCode -derivedDataPath build test`
 
-## Setup
+Release DMG: `./scripts/release.sh`
 
-First launch opens the onboarding guide:
+## Where things live
 
-1. **Create a Kapso account** at [kapso.com](https://kapso.com), connect a WhatsApp number, copy the **API key** (Project Settings → API Keys) and the **phone number ID**
-2. **Send "hi"** to your Kapso WhatsApp number from your phone (WhatsApp's 24h window)
-3. **Install hooks** — one click for Claude Code + Codex
-4. **Test** 🎉
-
-NotCode sends plain individual messages only. WhatsApp delivers them for 24h after your last message to the bot; every message you send resets the clock. If the window closes, NotCode shows a warning in the menu bar — text your number again and alerts resume.
-
-## Roadmap (v2)
-
-- Reply from WhatsApp to keep prompting a session while away (polls Kapso's messages API — no webhook/tunnel needed)
-- Full guided onboarding with screenshots
-- Notarized DMG, Homebrew cask, Sparkle auto-updates
-
-## Logs & files
-
-| Path | Purpose |
+| Path | What |
 |---|---|
-| `~/Library/Application Support/NotCode/config.json` | settings (0600) |
-| `~/Library/Application Support/NotCode/notcode-hook` | hook helper |
-| `~/Library/Logs/NotCode/notcode.log` | activity log |
-| `~/.claude/settings.json.notcode-backup` | backup before hook install |
+| `~/Library/Application Support/NotCode/config.json` | your settings (0600 — the API key never leaves your Mac except to call Kapso) |
+| `~/Library/Application Support/NotCode/notcode-hook` | the helper the agents invoke |
+| `~/Library/Logs/NotCode/notcode.log` | activity log — check here first when debugging |
+| `~/.claude/settings.json.notcode-backup` | automatic backup made before hook install |
+
+## Roadmap
+
+- **v2 — answer from WhatsApp**: reply to a notification to approve, answer questions, or keep prompting the session while away. No webhook or tunnel needed (the app polls Kapso's messages API)
+- Notarized builds + Homebrew cask (`brew install --cask notcode`)
+- Sparkle auto-updates
+- Guided onboarding with screenshots
+
+## Contributing
+
+Issues and PRs welcome. The codebase is small and boring on purpose: `NotCode/Shared/` is the engine (config, Kapso client, sounds, hook installer — fully unit-tested), `NotCode/Hook/` is the 50-line helper entry point, `NotCode/App/` is the SwiftUI menu bar app.
+
+## License
+
+[MIT](LICENSE) — do whatever you want, just keep the notice. 🔔

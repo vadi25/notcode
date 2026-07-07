@@ -1,5 +1,10 @@
 .DS_Store
 build/
+build-release/
 DerivedData/
+dist/
 *.xcodeproj
 xcuserdata/
+# Spoken alert sounds are generated locally via `say` (Apple voices are not
+# redistributable); only our synthesized .wav files ship in the repo.
+NotCode/Resources/Sounds/*.aiff

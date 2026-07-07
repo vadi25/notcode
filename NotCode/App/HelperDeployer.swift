@@ -36,14 +36,20 @@ enum HelperDeployer {
                 Log.append("deploy: sounds copy failed: \(error)")
             }
         }
+        SpokenSounds.ensureGenerated()
     }
 
-    /// Names of the sounds shipped with the app, for the settings picker.
+    /// Names of NotCode's own sounds for the settings picker: shipped with the
+    /// app plus the spoken ones generated locally at deploy time.
     static func bundledSoundNames() -> [String] {
-        let dir = Bundle.main.resourceURL?.appendingPathComponent("Sounds")
-        guard let dir,
-              let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path)
-        else { return [] }
-        return names.filter { !$0.hasPrefix(".") }.sorted()
+        var names = Set<String>()
+        for dir in [Bundle.main.resourceURL?.appendingPathComponent("Sounds"),
+                    Paths.installedSounds] {
+            guard let dir,
+                  let found = try? FileManager.default.contentsOfDirectory(atPath: dir.path)
+            else { continue }
+            names.formUnion(found.filter { !$0.hasPrefix(".") })
+        }
+        return names.sorted()
     }
 }
