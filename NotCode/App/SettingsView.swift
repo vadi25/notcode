@@ -278,9 +278,11 @@ struct AgentsSettings: View {
                 Label("Not installed", systemImage: "circle")
                     .foregroundStyle(.secondary)
             case .conflict(let existing):
-                Label("Conflict: existing notify command", systemImage: "exclamationmark.triangle")
+                Label("Existing notify command found", systemImage: "info.circle")
                     .foregroundStyle(.orange)
                 Text(existing).font(.system(.caption, design: .monospaced))
+                Text("Codex allows only one notify command. Install will chain them: your existing handler keeps working and NotCode gets notified too.")
+                    .font(.caption)
             }
             Text(detail).font(.caption).foregroundStyle(.secondary)
         }

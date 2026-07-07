@@ -103,44 +103,125 @@ enum HookInstaller {
 
     // MARK: - Codex (~/.codex/config.toml)
 
+    static let chainScriptName = "codex-notify-chain.sh"
+    static var chainScript: URL { Paths.appSupport.appendingPathComponent(chainScriptName) }
+    /// Original notify line saved before chaining, restored on uninstall.
+    static var codexOriginalNotify: URL {
+        Paths.appSupport.appendingPathComponent("codex-notify-original.txt")
+    }
+
     static func codexNotifyLine() -> String {
         "notify = [\"\(Paths.installedHelper.path)\", \"codex\"]"
+    }
+
+    static func isOurNotify(_ line: String) -> Bool {
+        line.contains(helperMarker) || line.contains(chainScriptName)
     }
 
     static func codexStatus() -> Status {
         guard let text = try? String(contentsOf: Paths.codexConfig, encoding: .utf8),
               let existing = rootNotifyLine(in: text)
         else { return .notInstalled }
-        return existing.contains(helperMarker) ? .installed : .conflict(existing: existing)
+        return isOurNotify(existing) ? .installed : .conflict(existing: existing)
     }
 
+    /// Installs the Codex notify hook. Codex supports only ONE notify command,
+    /// so when a foreign one exists we generate a chain script that forwards
+    /// the event to both the existing handler and notcode-hook.
     static func installCodex() throws {
         let existing = (try? String(contentsOf: Paths.codexConfig, encoding: .utf8)) ?? ""
-        if let line = rootNotifyLine(in: existing) {
-            guard line.contains(helperMarker) else {
-                throw NSError(domain: "NotCode", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "~/.codex/config.toml already has a notify command: \(line)"
-                ])
-            }
-            return
-        }
         try FileManager.default.createDirectory(
             at: Paths.codexConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        guard let line = rootNotifyLine(in: existing) else {
+            try backup(Paths.codexConfig)
+            // Root-level TOML keys must appear before any [table] section.
+            let updated = codexNotifyLine() + "\n" + existing
+            try updated.write(to: Paths.codexConfig, atomically: true, encoding: .utf8)
+            return
+        }
+        if isOurNotify(line) { return }
+
+        let tokens = try parseNotifyArray(line)
+        Paths.ensureAppSupportExists()
+        try chainScriptContent(existingCommand: tokens)
+            .write(to: chainScript, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: chainScript.path)
+        try Data(line.utf8).write(to: codexOriginalNotify)
+
         try backup(Paths.codexConfig)
-        // Root-level TOML keys must appear before any [table] section.
-        let updated = codexNotifyLine() + "\n" + existing
+        let newLine = "notify = [\"\(chainScript.path)\"]"
+        let updated = replaceRootNotify(in: existing, with: newLine)
         try updated.write(to: Paths.codexConfig, atomically: true, encoding: .utf8)
     }
 
     static func uninstallCodex() throws {
-        guard let text = try? String(contentsOf: Paths.codexConfig, encoding: .utf8) else { return }
-        let kept = text.components(separatedBy: "\n").filter { line in
-            !(isNotifyAssignment(line) && line.contains(helperMarker))
-        }
+        guard let text = try? String(contentsOf: Paths.codexConfig, encoding: .utf8),
+              let line = rootNotifyLine(in: text), isOurNotify(line) else { return }
         try backup(Paths.codexConfig)
-        try kept.joined(separator: "\n")
-            .write(to: Paths.codexConfig, atomically: true, encoding: .utf8)
+
+        let updated: String
+        if let original = try? String(contentsOf: codexOriginalNotify, encoding: .utf8),
+           !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            updated = replaceRootNotify(
+                in: text, with: original.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else {
+            updated = text.components(separatedBy: "\n")
+                .filter { !(isNotifyAssignment($0) && isOurNotify($0)) }
+                .joined(separator: "\n")
+        }
+        try updated.write(to: Paths.codexConfig, atomically: true, encoding: .utf8)
+        try? FileManager.default.removeItem(at: chainScript)
+        try? FileManager.default.removeItem(at: codexOriginalNotify)
+    }
+
+    /// Parses the string array out of a `notify = ["...", "..."]` line.
+    /// TOML basic strings in an array are close enough to JSON to reuse it.
+    static func parseNotifyArray(_ line: String) throws -> [String] {
+        guard let eq = line.firstIndex(of: "="),
+              let tokens = try? JSONSerialization.jsonObject(
+                  with: Data(line[line.index(after: eq)...]
+                      .trimmingCharacters(in: .whitespaces).utf8)) as? [String],
+              !tokens.isEmpty
+        else {
+            throw NSError(domain: "NotCode", code: 2, userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Couldn't parse the existing notify command in ~/.codex/config.toml: \(line)"
+            ])
+        }
+        return tokens
+    }
+
+    /// Replaces the root-level notify assignment, leaving everything else as is.
+    static func replaceRootNotify(in text: String, with newLine: String) -> String {
+        var replaced = false
+        var inRoot = true
+        return text.components(separatedBy: "\n").map { line -> String in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[") { inRoot = false }
+            if inRoot && !replaced && isNotifyAssignment(trimmed) {
+                replaced = true
+                return newLine
+            }
+            return line
+        }.joined(separator: "\n")
+    }
+
+    static func chainScriptContent(existingCommand: [String]) -> String {
+        let existing = existingCommand.map(shellEscape).joined(separator: " ")
+        return """
+        #!/bin/bash
+        # Generated by NotCode. Codex supports a single notify command, so this
+        # script forwards each event to every handler. "$@" carries the JSON payload.
+        \(existing) "$@" &
+        \(shellEscape(Paths.installedHelper.path)) codex "$@" &
+        wait
+        """
+    }
+
+    static func shellEscape(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     /// Finds a `notify =` assignment at the TOML root (before any [section]).

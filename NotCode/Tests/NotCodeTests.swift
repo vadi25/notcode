@@ -106,6 +106,35 @@ final class HookInstallerMergeTests: XCTestCase {
         XCTAssertEqual(onceJSON, twiceJSON)
     }
 
+    func testParseNotifyArray() throws {
+        let line = #"notify = ["/Users/x/Sky Client.app/Contents/MacOS/SkyClient", "turn-ended"]"#
+        let tokens = try HookInstaller.parseNotifyArray(line)
+        XCTAssertEqual(tokens, ["/Users/x/Sky Client.app/Contents/MacOS/SkyClient", "turn-ended"])
+        XCTAssertThrowsError(try HookInstaller.parseNotifyArray("notify = not-an-array"))
+    }
+
+    func testReplaceRootNotifyOnlyTouchesRootLine() {
+        let toml = """
+        model = "gpt-5"
+        notify = ["old"]
+        [profiles.x]
+        notify = ["inner-stays"]
+        """
+        let updated = HookInstaller.replaceRootNotify(in: toml, with: "notify = [\"new\"]")
+        XCTAssertTrue(updated.contains("notify = [\"new\"]"))
+        XCTAssertTrue(updated.contains("notify = [\"inner-stays\"]"))
+        XCTAssertFalse(updated.contains("notify = [\"old\"]"))
+        XCTAssertTrue(updated.contains("model = \"gpt-5\""))
+    }
+
+    func testChainScriptForwardsToBothHandlers() {
+        let script = HookInstaller.chainScriptContent(
+            existingCommand: ["/Users/x/Sky Client.app/MacOS/SkyClient", "turn-ended"])
+        XCTAssertTrue(script.hasPrefix("#!/bin/bash"))
+        XCTAssertTrue(script.contains("'/Users/x/Sky Client.app/MacOS/SkyClient' 'turn-ended' \"$@\""))
+        XCTAssertTrue(script.contains("notcode-hook' codex \"$@\""))
+    }
+
     func testCodexRootNotifyDetection() {
         XCTAssertNil(HookInstaller.rootNotifyLine(in: ""))
         XCTAssertNil(HookInstaller.rootNotifyLine(in: "model = \"gpt-5\"\n[tui]\nnotifications = true"))
