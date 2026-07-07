@@ -1,0 +1,39 @@
+import SwiftUI
+
+struct MenuView: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        Group {
+            Text(state.config.paused ? "NotCode — Paused" : "NotCode — Active")
+            if let last = state.lastNotification {
+                Text("Last: \(last)")
+            }
+
+            Divider()
+
+            Button(state.config.paused ? "Resume Notifications" : "Pause Notifications") {
+                state.config.paused.toggle()
+            }
+
+            Button("Send Test Notification") {
+                state.sendTestNotification()
+            }
+            if let result = state.testResult {
+                Text(result)
+            }
+
+            Divider()
+
+            Button("Settings…") { SettingsOpener.open() }
+                .keyboardShortcut(",")
+            Button("Setup Guide…") { AppDelegate.instance?.showOnboarding() }
+
+            Divider()
+
+            Button("Quit NotCode") { NSApp.terminate(nil) }
+                .keyboardShortcut("q")
+        }
+        .onAppear { state.refresh() }
+    }
+}

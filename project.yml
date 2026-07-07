@@ -1,0 +1,74 @@
+name: NotCode
+options:
+  bundleIdPrefix: com.notcode
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  notcode-hook:
+    type: tool
+    platform: macOS
+    sources:
+      - NotCode/Hook
+      - NotCode/Shared
+
+  NotCode:
+    type: application
+    platform: macOS
+    sources:
+      - NotCode/App
+      - NotCode/Shared
+      - path: NotCode/Resources/Sounds
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: notcode-hook
+        embed: false
+    info:
+      path: NotCode/App/Info.plist
+      properties:
+        CFBundleDisplayName: NotCode
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSUIElement: true
+        LSMinimumSystemVersion: "13.0"
+        NSHumanReadableCopyright: ""
+    postBuildScripts:
+      - name: Embed notcode-hook helper
+        script: |
+          cp "$BUILT_PRODUCTS_DIR/notcode-hook" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/MacOS/notcode-hook"
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/notcode-hook
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/MacOS/notcode-hook
+
+  NotCodeTests:
+    type: bundle.unit-test
+    platform: macOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - NotCode/Tests
+      - NotCode/Shared
+
+schemes:
+  NotCode:
+    build:
+      targets:
+        NotCode: all
+    test:
+      targets:
+        - NotCodeTests
+  notcode-hook:
+    build:
+      targets:
+        notcode-hook: all
