@@ -41,6 +41,9 @@ struct NotCodeConfig: Codable, Equatable {
     // Sounds
     var soundAttention: SoundChoice = .defaultAttention
     var soundDone: SoundChoice = .defaultDone
+    /// Optional per-agent overrides keyed "<agent name>|<kind rawValue>";
+    /// a missing key falls back to the global choice above.
+    var soundOverrides: [String: SoundChoice] = [:]
     var volume: Double = 1.0
 
     // App state
@@ -52,6 +55,15 @@ struct NotCodeConfig: Codable, Equatable {
 
     func isEnabled(_ agent: String) -> Bool {
         !disabledAgents.contains(agent)
+    }
+
+    static func soundOverrideKey(_ agent: String, _ kind: AgentEvent.Kind) -> String {
+        "\(agent)|\(kind.rawValue)"
+    }
+
+    func sound(for agent: String, kind: AgentEvent.Kind) -> SoundChoice {
+        soundOverrides[Self.soundOverrideKey(agent, kind)]
+            ?? (kind == .attention ? soundAttention : soundDone)
     }
 
     mutating func setEnabled(_ agent: String, _ enabled: Bool) {
@@ -85,6 +97,7 @@ struct NotCodeConfig: Codable, Equatable {
         suppressWhileWatching = try c.decodeIfPresent(Bool.self, forKey: .suppressWhileWatching) ?? d.suppressWhileWatching
         soundAttention = try c.decodeIfPresent(SoundChoice.self, forKey: .soundAttention) ?? d.soundAttention
         soundDone = try c.decodeIfPresent(SoundChoice.self, forKey: .soundDone) ?? d.soundDone
+        soundOverrides = try c.decodeIfPresent([String: SoundChoice].self, forKey: .soundOverrides) ?? d.soundOverrides
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? d.volume
         onboardingCompleted = try c.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? d.onboardingCompleted
     }

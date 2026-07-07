@@ -324,6 +324,25 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(again.disabledAgents, ["Claude Code", "Cursor"])
     }
 
+    func testPerAgentSoundOverridesFallBackToGlobals() throws {
+        var config = NotCodeConfig()
+        config.soundDone = SoundChoice(kind: .system, value: "Glass")
+        XCTAssertEqual(config.sound(for: "Cursor", kind: .done).value, "Glass")
+
+        let quack = SoundChoice(kind: .file, value: "/tmp/quack.wav")
+        config.soundOverrides[NotCodeConfig.soundOverrideKey("Cursor", .done)] = quack
+        XCTAssertEqual(config.sound(for: "Cursor", kind: .done), quack)
+        XCTAssertEqual(config.sound(for: "Codex", kind: .done).value, "Glass",
+                       "an override for one agent must not leak to others")
+        XCTAssertEqual(config.sound(for: "Cursor", kind: .attention), .defaultAttention,
+                       "kinds resolve independently")
+
+        // Overrides survive the config round trip.
+        let decoded = try JSONDecoder().decode(
+            NotCodeConfig.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(decoded.sound(for: "Cursor", kind: .done), quack)
+    }
+
     func testHasKapsoCredentials() {
         var config = NotCodeConfig()
         XCTAssertFalse(config.hasKapsoCredentials)

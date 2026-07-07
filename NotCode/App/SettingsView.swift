@@ -97,8 +97,75 @@ struct SoundsSettings: View {
                     Text("Volume")
                 }
             }
+
+            Section("Per-agent sounds") {
+                Text("Give an agent its own voice — anything left on \"Default\" uses the sounds above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(AgentRegistry.all, id: \.name) { agent in
+                    if agent.emitsAttention {
+                        OverrideSoundPickerRow(
+                            title: "\(agent.name) — needs attention",
+                            choice: overrideBinding(agent.name, .attention),
+                            fallback: state.config.soundAttention,
+                            volume: state.config.volume)
+                    }
+                    OverrideSoundPickerRow(
+                        title: "\(agent.name) — task finished",
+                        choice: overrideBinding(agent.name, .done),
+                        fallback: state.config.soundDone,
+                        volume: state.config.volume)
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+
+    private func overrideBinding(_ agent: String, _ kind: AgentEvent.Kind) -> Binding<SoundChoice?> {
+        let key = NotCodeConfig.soundOverrideKey(agent, kind)
+        return Binding(
+            get: { state.config.soundOverrides[key] },
+            set: { state.config.soundOverrides[key] = $0 })
+    }
+}
+
+/// A sound picker whose nil state means "use the global default".
+struct OverrideSoundPickerRow: View {
+    let title: String
+    @Binding var choice: SoundChoice?
+    let fallback: SoundChoice
+    let volume: Double
+
+    private var bundled: [String] { HelperDeployer.bundledSoundNames() }
+    private var system: [String] { SoundPlayer.systemSoundNames() }
+
+    var body: some View {
+        HStack {
+            Picker(title, selection: $choice) {
+                Text("Default").tag(SoundChoice?.none)
+                Divider()
+                Text("None").tag(SoundChoice?.some(.silent))
+                if !bundled.isEmpty {
+                    Divider()
+                    ForEach(bundled, id: \.self) { name in
+                        Text("NotCode: \((name as NSString).deletingPathExtension)")
+                            .tag(SoundChoice?.some(SoundChoice(kind: .bundled, value: name)))
+                    }
+                }
+                Divider()
+                ForEach(system, id: \.self) { name in
+                    Text(name).tag(SoundChoice?.some(SoundChoice(kind: .system, value: name)))
+                }
+                if choice?.kind == .file, let choice {
+                    Divider()
+                    Text("Custom: \((choice.value as NSString).lastPathComponent)")
+                        .tag(SoundChoice?.some(choice))
+                }
+            }
+            Button("Preview") {
+                SoundPlayer.play(choice ?? fallback, volume: volume)
+            }
+        }
     }
 }
 

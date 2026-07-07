@@ -47,7 +47,7 @@ enum Notifier {
             }
         }
 
-        let sound = event.kind == .attention ? config.soundAttention : config.soundDone
+        let sound = config.sound(for: event.agent, kind: event.kind)
         outcome.soundPlayed = SoundPlayer.play(sound, volume: config.volume,
                                                blocking: blockingSound)
 
