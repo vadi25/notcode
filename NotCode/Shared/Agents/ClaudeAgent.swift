@@ -127,7 +127,7 @@ struct ClaudeAgent: AgentModule {
 
     func resumeCommand(sessionID: String, prompt: String) -> String? {
         "claude -p --resume \(HookInstaller.shellEscape(sessionID)) "
-            + "--output-format json \(HookInstaller.shellEscape(prompt))"
+            + "--output-format json -- \(HookInstaller.shellEscape(prompt))"
     }
 
     /// `claude -p --output-format json` emits one object with `result` (the

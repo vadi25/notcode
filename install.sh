@@ -20,7 +20,7 @@ trap cleanup EXIT
 [ "$(uname)" = "Darwin" ] || { echo "NotCode is a macOS app (13.0 or newer)."; exit 1; }
 
 echo "Downloading NotCode (latest release)..."
-curl -fL --progress-bar "$DMG_URL" -o "$TMP/NotCode.dmg"
+curl -fL --proto '=https' --proto-redir '=https' --tlsv1.2 --progress-bar "$DMG_URL" -o "$TMP/NotCode.dmg"
 
 echo "Installing to /Applications..."
 MOUNT=$(hdiutil attach "$TMP/NotCode.dmg" -nobrowse -readonly | awk -F'\t' '/\/Volumes\//{print $NF; exit}')

@@ -49,6 +49,16 @@ enum UpdateChecker {
         try? FileManager.default.removeItem(at: dmg)
         try FileManager.default.moveItem(at: tmpDMG, to: dmg)
 
+        // The fixed `latest/download` URL could serve an older build (rollback
+        // or stale CDN); never replace the installed app with one that isn't
+        // strictly newer.
+        do {
+            try verifyDownloadedIsNewer(dmg: dmg)
+        } catch {
+            try? FileManager.default.removeItem(at: dmg)
+            throw error
+        }
+
         let script = FileManager.default.temporaryDirectory
             .appendingPathComponent("notcode-update.sh")
         try updateScript(dmgPath: dmg.path).write(to: script, atomically: true, encoding: .utf8)
@@ -64,6 +74,62 @@ enum UpdateChecker {
 
         Log.append("update: handing off to swap script, quitting")
         await MainActor.run { NSApp.terminate(nil) }
+    }
+
+    /// Mounts the downloaded DMG and throws unless the app inside reports a
+    /// version strictly newer than the running one. Always detaches the mount.
+    private static func verifyDownloadedIsNewer(dmg: URL) throws {
+        let mount = try attachDMG(dmg)
+        defer { detachDMG(mount) }
+        let plist = URL(fileURLWithPath: mount)
+            .appendingPathComponent("NotCode.app/Contents/Info.plist")
+        guard let info = NSDictionary(contentsOf: plist),
+              let version = info["CFBundleShortVersionString"] as? String
+        else {
+            throw NSError(domain: "NotCode", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: "downloaded app has no readable version"
+            ])
+        }
+        guard VersionCompare.isNewer(version, than: currentVersion) else {
+            throw NSError(domain: "NotCode", code: 5, userInfo: [
+                NSLocalizedDescriptionKey:
+                    "downloaded version \(version) is not newer than \(currentVersion)"
+            ])
+        }
+    }
+
+    private static func attachDMG(_ dmg: URL) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.arguments = ["attach", dmg.path, "-nobrowse", "-readonly"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(),
+                            as: UTF8.self)
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let mount = output.split(separator: "\n")
+                  .compactMap({ $0.split(separator: "\t").last })
+                  .map({ $0.trimmingCharacters(in: .whitespaces) })
+                  .first(where: { $0.hasPrefix("/Volumes/") })
+        else {
+            throw NSError(domain: "NotCode", code: 6, userInfo: [
+                NSLocalizedDescriptionKey: "downloaded DMG could not be mounted"
+            ])
+        }
+        return mount
+    }
+
+    private static func detachDMG(_ mount: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.arguments = ["detach", mount, "-quiet"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return }
+        process.waitUntilExit()
     }
 
     private static func updateScript(dmgPath: String) -> String {

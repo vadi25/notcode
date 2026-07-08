@@ -10,12 +10,19 @@ enum HelperDeployer {
 
         if let source = Bundle.main.url(forAuxiliaryExecutable: "notcode-hook") {
             do {
-                if fm.fileExists(atPath: Paths.installedHelper.path) {
-                    try fm.removeItem(at: Paths.installedHelper)
-                }
-                try fm.copyItem(at: source, to: Paths.installedHelper)
+                // Stage next to the destination and swap atomically — a hook
+                // firing mid-deploy must never find the helper missing.
+                let staged = Paths.installedHelper.deletingLastPathComponent()
+                    .appendingPathComponent("notcode-hook.new")
+                try? fm.removeItem(at: staged)
+                try fm.copyItem(at: source, to: staged)
                 try fm.setAttributes([.posixPermissions: 0o755],
-                                     ofItemAtPath: Paths.installedHelper.path)
+                                     ofItemAtPath: staged.path)
+                if fm.fileExists(atPath: Paths.installedHelper.path) {
+                    _ = try fm.replaceItemAt(Paths.installedHelper, withItemAt: staged)
+                } else {
+                    try fm.moveItem(at: staged, to: Paths.installedHelper)
+                }
             } catch {
                 Log.append("deploy: helper copy failed: \(error)")
             }

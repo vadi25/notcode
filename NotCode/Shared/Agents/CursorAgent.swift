@@ -111,6 +111,6 @@ struct CursorAgent: AgentModule {
 
     func resumeCommand(sessionID: String, prompt: String) -> String? {
         "cursor-agent -p --resume \(HookInstaller.shellEscape(sessionID)) "
-            + HookInstaller.shellEscape(prompt)
+            + "-- \(HookInstaller.shellEscape(prompt))"
     }
 }

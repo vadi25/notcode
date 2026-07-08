@@ -214,7 +214,7 @@ struct CodexAgent: AgentModule {
         // --output-last-message keeps stdout to just the final answer; the
         // event stream goes to /dev/null.
         return "f=$(mktemp) && codex exec resume \(HookInstaller.shellEscape(real)) "
-            + "-o \"$f\" \(HookInstaller.shellEscape(prompt)) >/dev/null 2>&1; "
+            + "-o \"$f\" -- \(HookInstaller.shellEscape(prompt)) >/dev/null 2>&1; "
             + "s=$?; cat \"$f\"; rm -f \"$f\"; exit $s"
     }
 
@@ -249,6 +249,9 @@ struct CodexAgent: AgentModule {
             return sessionID(fromRolloutFilename: hit.url.lastPathComponent)
         }
         for candidate in candidates.prefix(100) {
+            let size = (try? fm.attributesOfItem(atPath: candidate.url.path)[.size] as? NSNumber)?
+                .int64Value ?? 0
+            guard size <= 5 * 1024 * 1024 else { continue }
             if let text = try? String(contentsOf: candidate.url, encoding: .utf8),
                text.contains(id) {
                 return sessionID(fromRolloutFilename: candidate.url.lastPathComponent)

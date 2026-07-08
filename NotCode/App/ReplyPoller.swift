@@ -134,7 +134,25 @@ final class ReplyPoller: ObservableObject {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/bash")
             process.arguments = ["-lc", command]
-            if let cwd = info.cwd, FileManager.default.fileExists(atPath: cwd) {
+            if let cwd = info.cwd {
+                // The hook payload controls this path; only resume inside a
+                // real absolute directory, never somewhere unexpected.
+                var isDirectory: ObjCBool = false
+                guard cwd.hasPrefix("/"),
+                      FileManager.default.fileExists(atPath: cwd, isDirectory: &isDirectory),
+                      isDirectory.boolValue
+                else {
+                    Log.append("reply loop: resume aborted, invalid cwd for \(project)")
+                    _ = client.sendText(
+                        "⚠️ Can't resume \(info.agent) in *\(project)*: its working directory is missing.",
+                        to: config.recipientPhone)
+                    StateStore.recordWhatsAppSent()
+                    await MainActor.run { [weak self] in
+                        self?.busySessions.remove(sessionID)
+                        self?.activeRun = nil
+                    }
+                    return
+                }
                 process.currentDirectoryURL = URL(fileURLWithPath: cwd)
             }
             // The resumed run's own hooks must not double-notify; the poller

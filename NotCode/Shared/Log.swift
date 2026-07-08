@@ -7,7 +7,9 @@ enum Log {
 
     static func append(_ message: String) {
         let fm = FileManager.default
-        try? fm.createDirectory(at: Paths.logsDir, withIntermediateDirectories: true)
+        // Owner-only: log lines can embed notification content.
+        try? fm.createDirectory(at: Paths.logsDir, withIntermediateDirectories: true,
+                                attributes: [.posixPermissions: 0o700])
 
         let stamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(stamp)] \(sanitized(message))\n"
@@ -23,6 +25,8 @@ enum Log {
             try? handle.write(contentsOf: Data(line.utf8))
         } else {
             try? Data(line.utf8).write(to: Paths.logFile)
+            try? fm.setAttributes(
+                [.posixPermissions: 0o600], ofItemAtPath: Paths.logFile.path)
         }
     }
 
