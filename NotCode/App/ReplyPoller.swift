@@ -18,9 +18,9 @@ final class ReplyPoller: ObservableObject {
     nonisolated init() {}
 
     // Poll fast right after we messaged the user (that's when replies come),
-    // slower for a while, then not at all — keeps Kapso volume trivial.
+    // then a steady baseline whenever the loop is enabled so commands like
+    // "help" are received any time the app is running and online.
     static let fastWindow: TimeInterval = 5 * 60
-    static let slowWindow: TimeInterval = 35 * 60
     static let slowInterval: TimeInterval = 60
 
     func reconfigure(_ config: NotCodeConfig) {
@@ -44,11 +44,15 @@ final class ReplyPoller: ObservableObject {
     }
 
     private func tick() {
-        guard let outbound = StateStore.load().lastOutboundWhatsApp else { return }
-        let sinceOutbound = Date().timeIntervalSince(outbound)
-        if sinceOutbound > Self.slowWindow { return }
+        let now = Date()
+        // Within the fast window (just after we messaged the user) poll every
+        // tick; otherwise fall back to the steady baseline cadence. No upper
+        // cutoff — while the loop is enabled the app keeps listening so cold
+        // commands like "help" are always received.
+        let sinceOutbound = StateStore.load().lastOutboundWhatsApp
+            .map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
         if sinceOutbound > Self.fastWindow,
-           let lastPoll, Date().timeIntervalSince(lastPoll) < Self.slowInterval { return }
+           let lastPoll, now.timeIntervalSince(lastPoll) < Self.slowInterval { return }
         poll()
     }
 
