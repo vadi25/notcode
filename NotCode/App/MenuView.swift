@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Menu items size to their content, so one long free-form line (a notification
+/// message, a deep project path) stretches the whole menu. Clamp the variable
+/// bits; the full text is offered on the hover tooltip.
+private func short(_ text: String, _ max: Int = 36) -> String {
+    text.count <= max ? text : String(text.prefix(max - 1)) + "…"
+}
+
 struct MenuView: View {
     @EnvironmentObject private var state: AppState
 
@@ -7,13 +14,16 @@ struct MenuView: View {
         Group {
             Text(state.config.paused ? "NotCode — Paused" : "NotCode — Active")
             if let project = state.replyPoller.activeRun {
-                Text("▶️ Remote reply running in \(project)")
+                Text("▶️ Remote reply running in \(short(project, 24))")
+                    .help(project)
             }
             if let last = state.lastNotification {
-                Text("Last: \(last)")
+                Text("Last: \(short(last))")
+                    .help(last)
             }
             if let problem = state.lastDeliveryProblem {
-                Text("⚠️ \(problem)")
+                Text("⚠️ \(short(problem))")
+                    .help(problem)
             }
 
             Divider()
