@@ -51,6 +51,9 @@ struct NotCodeConfig: Codable, Equatable {
     var replyConfirmationsEnabled: Bool = true
     /// Kapso plan limit shown in the UI so the user can track usage.
     var monthlyMessageBudget: Int = 2000
+    /// Set once the user dismisses the "menu bar full" hint with "Don't show
+    /// again"; suppresses that popup on every future launch.
+    var menuBarHintDismissed: Bool = false
 
     // Sounds
     var soundAttention: SoundChoice = .defaultAttention
@@ -114,6 +117,7 @@ struct NotCodeConfig: Codable, Equatable {
         pollIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds) ?? d.pollIntervalSeconds
         replyConfirmationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .replyConfirmationsEnabled) ?? d.replyConfirmationsEnabled
         monthlyMessageBudget = try c.decodeIfPresent(Int.self, forKey: .monthlyMessageBudget) ?? d.monthlyMessageBudget
+        menuBarHintDismissed = try c.decodeIfPresent(Bool.self, forKey: .menuBarHintDismissed) ?? d.menuBarHintDismissed
         soundAttention = try c.decodeIfPresent(SoundChoice.self, forKey: .soundAttention) ?? d.soundAttention
         soundDone = try c.decodeIfPresent(SoundChoice.self, forKey: .soundDone) ?? d.soundDone
         soundOverrides = try c.decodeIfPresent([String: SoundChoice].self, forKey: .soundOverrides) ?? d.soundOverrides

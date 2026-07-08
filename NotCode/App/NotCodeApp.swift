@@ -71,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (menu bar full). One gentle heads-up per launch, nothing recurring.
     @MainActor private func warnIfMenuBarIconHidden() {
         guard !warnedHiddenIcon,
+              !AppState.shared.config.menuBarHintDismissed,
               let statusWindow = NSApp.windows.first(
                   where: { $0.className.contains("StatusBarWindow") }),
               !statusWindow.occlusionState.contains(.visible)
@@ -91,9 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         """
         alert.addButton(withTitle: "Open Settings")
         alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Don't show again")
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
             SettingsOpener.open()
+        case .alertThirdButtonReturn:
+            AppState.shared.config.menuBarHintDismissed = true   // persists via didSet
+        default:
+            break
         }
     }
 
