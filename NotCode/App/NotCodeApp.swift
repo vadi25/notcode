@@ -8,14 +8,23 @@ struct NotCodeApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView().environmentObject(state)
+            MenuView()
+                .environmentObject(state)
+                .background { settingsBridge }
         } label: {
             Image(systemName: state.config.paused ? "bell.slash" : "bell.badge")
+                .background { settingsBridge }
         }
 
         Settings {
             SettingsView().environmentObject(state)
         }
+    }
+
+    /// Captures SwiftUI's openSettings action (macOS 14+) so the AppKit code
+    /// paths can open Settings; harmless no-op view on macOS 13.
+    @ViewBuilder private var settingsBridge: some View {
+        if #available(macOS 14.0, *) { SettingsActionBridge() }
     }
 }
 
@@ -110,7 +119,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 enum SettingsOpener {
     @MainActor static func open() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        // A menu-bar-only (LSUIElement) app has no responder chain for the old
+        // NSApp.sendAction(showSettingsWindow:) route, so on macOS 14+ it silently
+        // no-ops. Prefer SwiftUI's openSettings action, captured from a view into
+        // SettingsLauncher; fall back to sendAction on macOS 13. Deferred one
+        // run-loop hop so it also works right after an NSAlert modal closes.
         NSApp.activate(ignoringOtherApps: true)
+        Task { @MainActor in
+            if let opener = SettingsLauncher.shared.opener {
+                opener()
+            } else if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+                NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+            }
+        }
+    }
+}
+
+/// Stores SwiftUI's openSettings action so AppKit paths (reopen handler, the
+/// "menu bar full" alert) can open the Settings scene on modern macOS.
+@MainActor
+final class SettingsLauncher {
+    static let shared = SettingsLauncher()
+    var opener: (() -> Void)?
+}
+
+/// Zero-size view that captures the environment's openSettings action into
+/// SettingsLauncher. Hosted in the menu bar label and menu content so it is
+/// registered at launch (label) and whenever the menu opens (content).
+@available(macOS 14.0, *)
+private struct SettingsActionBridge: View {
+    @Environment(\.openSettings) private var openSettings
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onAppear { SettingsLauncher.shared.opener = { openSettings() } }
     }
 }

@@ -18,7 +18,7 @@ struct SettingsView: View {
             BetaSettings()
                 .tabItem { Label("Beta", systemImage: "testtube.2") }
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 480, height: 460)
         .onAppear {
             state.refresh()
             // Menu bar apps have no dock presence; without this the settings
