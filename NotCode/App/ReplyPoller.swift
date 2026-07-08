@@ -11,17 +11,18 @@ final class ReplyPoller: ObservableObject {
     private var timer: Timer?
     private var config = NotCodeConfig()
     private var lastPoll: Date?
+    private var lastInboundActivity: Date?   // updated each time a message is processed
     private var busySessions: Set<String> = []
 
     /// nonisolated so non-main-actor owners (AppState) can create it; all
     /// mutable state is still only touched on the main actor.
     nonisolated init() {}
 
-    // Poll fast right after we messaged the user (that's when replies come),
-    // then a steady baseline whenever the loop is enabled so commands like
-    // "help" are received any time the app is running and online.
+    // Within fastWindow of the last outbound WhatsApp OR the last inbound
+    // message we treat the conversation as "active" and clamp the poll
+    // interval to at most 15 s so replies feel snappy.  Outside that window
+    // the user-chosen cadence applies (saves battery while idle).
     static let fastWindow: TimeInterval = 5 * 60
-    static let slowInterval: TimeInterval = 60
 
     func reconfigure(_ config: NotCodeConfig) {
         self.config = config
@@ -30,7 +31,7 @@ final class ReplyPoller: ObservableObject {
         if shouldRun, timer == nil {
             // Only messages sent after enabling count.
             lastPoll = Date()
-            let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
             RunLoop.main.add(timer, forMode: .common)
@@ -45,14 +46,18 @@ final class ReplyPoller: ObservableObject {
 
     private func tick() {
         let now = Date()
-        // Within the fast window (just after we messaged the user) poll every
-        // tick; otherwise fall back to the steady baseline cadence. No upper
-        // cutoff — while the loop is enabled the app keeps listening so cold
-        // commands like "help" are always received.
-        let sinceOutbound = StateStore.load().lastOutboundWhatsApp
+        // "Active" = within fastWindow of either the last outbound WhatsApp or
+        // the last inbound message (live conversation).  Active window clamps
+        // to ≤ 15 s so replies feel snappy; outside it the user's chosen
+        // cadence applies.  No upper cutoff — idle but enabled always listens.
+        let state = StateStore.load()
+        let sinceOutbound = state.lastOutboundWhatsApp
             .map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
-        if sinceOutbound > Self.fastWindow,
-           let lastPoll, now.timeIntervalSince(lastPoll) < Self.slowInterval { return }
+        let sinceInbound = lastInboundActivity
+            .map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
+        let active = sinceOutbound < Self.fastWindow || sinceInbound < Self.fastWindow
+        let effective = TimeInterval(active ? min(config.pollIntervalSeconds, 15) : config.pollIntervalSeconds)
+        if let lastPoll, now.timeIntervalSince(lastPoll) < effective { return }
         poll()
     }
 
@@ -80,6 +85,8 @@ final class ReplyPoller: ObservableObject {
                           KapsoClient.phoneMatches(message.from, config.recipientPhone)
                     else { continue }
                     StateStore.markProcessed(message.id)
+                    StateStore.recordInboundMessage()
+                    await MainActor.run { [weak self] in self?.lastInboundActivity = Date() }
                     Log.append("reply loop: inbound \(message.id)")
                     await self?.handle(message.text, client: client, config: config)
                 }
@@ -125,7 +132,9 @@ final class ReplyPoller: ObservableObject {
             }
             busySessions.insert(id)
             activeRun = project
-            send("▶️ Sent to \(info.agent) in *\(project)* — I'll confirm when it's done.")
+            if config.replyConfirmationsEnabled {
+                send("▶️ Sent to \(info.agent) in *\(project)* — I'll confirm when it's done.")
+            }
             runResume(command: command, module: module, sessionID: id,
                       info: info, client: client, config: config)
         }
@@ -190,8 +199,12 @@ final class ReplyPoller: ObservableObject {
                 reply = "⚠️ Couldn't start \(info.agent) for *\(project)*: \(error.localizedDescription)"
             }
             Log.append("reply loop: resume finished for \(project)")
-            _ = client.sendText(reply, to: config.recipientPhone)
-            StateStore.recordWhatsAppSent()
+            // ✅ success confirmations are optional; ⚠️ error alerts always send.
+            let suppress = reply.hasPrefix("✅") && !config.replyConfirmationsEnabled
+            if !suppress {
+                _ = client.sendText(reply, to: config.recipientPhone)
+                StateStore.recordWhatsAppSent()
+            }
             await MainActor.run { [weak self] in
                 self?.busySessions.remove(sessionID)
                 self?.activeRun = nil

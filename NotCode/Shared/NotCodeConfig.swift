@@ -43,6 +43,14 @@ struct NotCodeConfig: Codable, Equatable {
     /// Include a short excerpt of the agent's answer in the completion
     /// message. Off by default: the privacy stance is status-only.
     var replyExcerptEnabled: Bool = false
+    /// How often (seconds) the reply poller checks for inbound messages in the
+    /// idle (non-active) state. Active windows always clamp to ≤ 15 s.
+    var pollIntervalSeconds: Int = 15
+    /// When false the ▶️ / ✅ progress confirmations are suppressed to save
+    /// messages. ⚠️ error alerts always send regardless.
+    var replyConfirmationsEnabled: Bool = true
+    /// Kapso plan limit shown in the UI so the user can track usage.
+    var monthlyMessageBudget: Int = 2000
 
     // Sounds
     var soundAttention: SoundChoice = .defaultAttention
@@ -103,6 +111,9 @@ struct NotCodeConfig: Codable, Equatable {
         suppressWhileWatching = try c.decodeIfPresent(Bool.self, forKey: .suppressWhileWatching) ?? d.suppressWhileWatching
         replyLoopEnabled = try c.decodeIfPresent(Bool.self, forKey: .replyLoopEnabled) ?? d.replyLoopEnabled
         replyExcerptEnabled = try c.decodeIfPresent(Bool.self, forKey: .replyExcerptEnabled) ?? d.replyExcerptEnabled
+        pollIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds) ?? d.pollIntervalSeconds
+        replyConfirmationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .replyConfirmationsEnabled) ?? d.replyConfirmationsEnabled
+        monthlyMessageBudget = try c.decodeIfPresent(Int.self, forKey: .monthlyMessageBudget) ?? d.monthlyMessageBudget
         soundAttention = try c.decodeIfPresent(SoundChoice.self, forKey: .soundAttention) ?? d.soundAttention
         soundDone = try c.decodeIfPresent(SoundChoice.self, forKey: .soundDone) ?? d.soundDone
         soundOverrides = try c.decodeIfPresent([String: SoundChoice].self, forKey: .soundOverrides) ?? d.soundOverrides

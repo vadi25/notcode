@@ -57,6 +57,29 @@ struct WhatsAppSettings: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Reply loop") {
+                Picker("Reply speed", selection: $state.config.pollIntervalSeconds) {
+                    Text("Instant (5 s)").tag(5)
+                    Text("Fast (15 s)").tag(15)
+                    Text("Relaxed (1 min)").tag(60)
+                    Text("Battery saver (5 min)").tag(300)
+                }
+                Text("How often NotCode checks for your replies while running. Polling is free on Kapso — this only affects battery.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Send progress confirmations", isOn: $state.config.replyConfirmationsEnabled)
+                Text("Off saves messages — you'll still get error alerts, just not the ▶️/✅ updates.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                let count = state.messageCount
+                let budget = state.config.monthlyMessageBudget
+                ProgressView(value: Double(min(count, budget)), total: Double(max(budget, 1)))
+                Text("\(count) / \(budget) messages this month")
+                Text("Kapso Free ≈ 2,000 msgs/mo. Polling is free — only messages sent or received count.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }
@@ -70,6 +93,7 @@ struct WhatsAppSettings: View {
             let result = client.sendText(
                 "NotCode is connected — you're all set 🎉",
                 to: config.recipientPhone)
+            if case .success = result { StateStore.recordWhatsAppSent() }
             await MainActor.run {
                 switch result {
                 case .success: sendResult = "Delivered ✓ — check your WhatsApp"

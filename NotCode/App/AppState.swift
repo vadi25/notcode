@@ -12,6 +12,7 @@ final class AppState: ObservableObject {
     @Published var hookStatuses: [String: HookInstaller.Status] = [:]
     @Published var lastNotification: String?
     @Published var lastDeliveryProblem: String?
+    @Published var messageCount: Int = 0
     @Published var testResult: String?
     @Published var availableUpdate: String?   // e.g. "v1.0.1"
     @Published var updating = false
@@ -65,6 +66,7 @@ final class AppState: ObservableObject {
         let state = StateStore.load()
         lastNotification = state.lastNotification
         lastDeliveryProblem = state.lastDeliveryProblem
+        messageCount = StateStore.currentMonthMessageCount()
     }
 
     func sendTestNotification() {

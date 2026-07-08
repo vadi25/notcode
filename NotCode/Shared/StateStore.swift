@@ -22,6 +22,28 @@ struct NotCodeState: Codable {
     var sessions: [String: SessionInfo] = [:]     // session_id → routing info
     var processedMessageIDs: [String] = []        // WhatsApp ids already handled
     var lastOutboundWhatsApp: Date?               // drives reply-poll cadence
+    /// Calendar month the message counter belongs to, e.g. "2026-07".
+    var messageMonth: String = ""
+    /// Running count of inbound + outbound WhatsApp messages this month.
+    var messageCount: Int = 0
+
+    init() {}
+
+    /// Tolerant decoding: new keys missing from older state.json fall back to
+    /// their defaults so the rest of the state (sessions, processed IDs, etc.)
+    /// is preserved rather than wiped whenever a field is added.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        recentEvents = try c.decodeIfPresent([String: Date].self, forKey: .recentEvents) ?? [:]
+        lastNotification = try c.decodeIfPresent(String.self, forKey: .lastNotification)
+        lastNotificationDate = try c.decodeIfPresent(Date.self, forKey: .lastNotificationDate)
+        lastDeliveryProblem = try c.decodeIfPresent(String.self, forKey: .lastDeliveryProblem)
+        sessions = try c.decodeIfPresent([String: SessionInfo].self, forKey: .sessions) ?? [:]
+        processedMessageIDs = try c.decodeIfPresent([String].self, forKey: .processedMessageIDs) ?? []
+        lastOutboundWhatsApp = try c.decodeIfPresent(Date.self, forKey: .lastOutboundWhatsApp)
+        messageMonth = try c.decodeIfPresent(String.self, forKey: .messageMonth) ?? ""
+        messageCount = try c.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
+    }
 }
 
 enum StateStore {
@@ -83,10 +105,41 @@ enum StateStore {
         save(state)
     }
 
+    /// Returns a "YYYY-MM" string for the given date using the current locale calendar.
+    private static func calendarMonth(_ date: Date) -> String {
+        let comps = Calendar.current.dateComponents([.year, .month], from: date)
+        return String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)
+    }
+
+    /// Rolls the monthly counter over if the month changed, then increments it.
+    private static func bumpCount(in state: inout NotCodeState, now: Date) {
+        let month = calendarMonth(now)
+        if state.messageMonth != month {
+            state.messageMonth = month
+            state.messageCount = 0
+        }
+        state.messageCount += 1
+    }
+
     static func recordWhatsAppSent(now: Date = Date()) {
         var state = load()
         state.lastOutboundWhatsApp = now
+        bumpCount(in: &state, now: now)
         save(state)
+    }
+
+    /// Records one inbound message against the monthly budget.
+    static func recordInboundMessage(now: Date = Date()) {
+        var state = load()
+        bumpCount(in: &state, now: now)
+        save(state)
+    }
+
+    /// Returns the message count for the current calendar month (0 if the
+    /// stored month has already rolled over).
+    static func currentMonthMessageCount(now: Date = Date()) -> Int {
+        let state = load()
+        return state.messageMonth == calendarMonth(now) ? state.messageCount : 0
     }
 
     /// Remembers a handled inbound WhatsApp message id (bounded).
