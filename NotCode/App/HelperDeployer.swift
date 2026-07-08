@@ -10,7 +10,7 @@ enum HelperDeployer {
 
         if let source = Bundle.main.url(forAuxiliaryExecutable: "notcode-hook") {
             do {
-                // Stage next to the destination and swap atomically — a hook
+                // Stage next to the destination and swap atomically: a hook
                 // firing mid-deploy must never find the helper missing.
                 let staged = Paths.installedHelper.deletingLastPathComponent()
                     .appendingPathComponent("notcode-hook.new")

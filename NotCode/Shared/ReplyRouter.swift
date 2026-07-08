@@ -22,7 +22,7 @@ enum ReplyRouter {
         let ordered = byRecency(sessions)
         guard let mostRecent = ordered.first else { return .noSessions }
 
-        // "<project>: message" — only a single-token prefix counts as routing,
+        // "<project>: message": only a single-token prefix counts as routing,
         // so a sentence like "fix this: the button" stays a bare message.
         if let colon = trimmed.firstIndex(of: ":") {
             let prefix = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
@@ -54,7 +54,7 @@ enum ReplyRouter {
 
     static func helpText(sessions: [String: SessionInfo]) -> String {
         """
-        🤖 NotCode — reply to drive your agents:
+        🤖 NotCode. Reply to drive your agents:
         • Any message goes to the most recent session
         • "<project>: <message>" targets that project
         • "help" shows this again

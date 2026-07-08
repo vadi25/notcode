@@ -140,7 +140,7 @@ enum UpdateChecker {
         for _ in $(seq 1 20); do pgrep -x NotCode >/dev/null || break; sleep 0.5; done
         MOUNT=$(hdiutil attach '\(dmgPath)' -nobrowse -readonly | awk -F'\\t' '/\\/Volumes\\//{print $NF; exit}')
         # Never remove the installed app until the replacement is confirmed
-        # present — a bad download must not leave the user with nothing.
+        # present; a bad download must not leave the user with nothing.
         if [ ! -d "$MOUNT/NotCode.app" ]; then
             hdiutil detach "$MOUNT" -quiet || true
             rm -f '\(dmgPath)'

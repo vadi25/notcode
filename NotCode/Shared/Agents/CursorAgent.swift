@@ -8,10 +8,11 @@ struct CursorAgent: AgentModule {
     let name = "Cursor"
     let hookSubcommands = ["cursor"]
     let payloadSource = PayloadSource.stdin
-    let installDetail = "Adds a stop hook to ~/.cursor/hooks.json — like Codex, Cursor only reports when a task finishes (no attention events)"
+    let installDetail = "Adds a stop hook to ~/.cursor/hooks.json. Like Codex, Cursor only reports when a task finishes (no attention events)"
     // Cursor's agent panel can be hidden while you code in the same window, so
     // being in Cursor does not mean you saw the run finish.
     let bypassesWatchingFilter = true
+    let cliBinaryName = "cursor-agent"
 
     func wrapperContent() -> String {
         """
@@ -88,7 +89,7 @@ struct CursorAgent: AgentModule {
     /// Cursor's stop hook passes JSON on stdin, e.g.
     /// {"hook_event_name":"stop","status":"completed","conversation_id":"...",
     ///  "workspace_roots":["/path"],"loop_count":0}
-    /// Returns nil for status "aborted" — the user cancelled the turn, so
+    /// Returns nil for status "aborted": the user cancelled the turn, so
     /// they're at the machine and a ding would be noise.
     func parse(subcommand: String, payload: Data) -> AgentEvent? {
         let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any] ?? [:]

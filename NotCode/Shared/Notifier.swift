@@ -15,7 +15,14 @@ enum Notifier {
                      blockingSound: Bool = false, bypassFilters: Bool = false) -> Outcome {
         var outcome = Outcome()
 
+        // Status panel bookkeeping: remember we heard from this agent, even if
+        // every filter below skips the notification. Persisted via StateStore
+        // because the hook helper runs in a separate process from the app. The
+        // app's own test button (bypassFilters) synthesizes an event rather
+        // than receiving one, so it doesn't count as agent activity.
         if !bypassFilters {
+            StateStore.recordAgentEvent(event.agent)
+
             if config.paused {
                 outcome.skippedReason = "paused"
                 return outcome

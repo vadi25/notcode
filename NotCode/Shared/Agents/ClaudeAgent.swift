@@ -9,6 +9,7 @@ struct ClaudeAgent: AgentModule {
     let payloadSource = PayloadSource.stdin
     let installDetail = "Adds Notification + Stop hooks to ~/.claude/settings.json"
     let emitsAttention = true
+    let cliBinaryName = "claude"
 
     static let events: [(event: String, subcommand: String)] = [
         ("Notification", "claude-notification"),
@@ -102,7 +103,7 @@ struct ClaudeAgent: AgentModule {
     /// Claude Code hooks pass JSON on stdin, e.g.
     /// {"session_id":"...","cwd":"...","hook_event_name":"Notification","message":"..."}
     /// Returns nil for Stop events re-fired by hook-forced continuations
-    /// (stop_hook_active) — notifying those would duplicate the real stop.
+    /// (stop_hook_active); notifying those would duplicate the real stop.
     func parse(subcommand: String, payload: Data) -> AgentEvent? {
         let kind: AgentEvent.Kind = subcommand == "claude-notification" ? .attention : .done
         let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any] ?? [:]

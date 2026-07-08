@@ -8,6 +8,7 @@ struct CodexAgent: AgentModule {
     let hookSubcommands = ["codex"]
     let payloadSource = PayloadSource.argument
     let installDetail = "Adds notify = [\"…/notcode-hook\", \"codex\"] to ~/.codex/config.toml"
+    let cliBinaryName = "codex"
 
     static let chainScriptName = "codex-notify-chain.sh"
     var chainScript: URL { Paths.appSupport.appendingPathComponent(Self.chainScriptName) }

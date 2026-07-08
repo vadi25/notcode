@@ -12,7 +12,7 @@ struct MenuView: View {
 
     var body: some View {
         Group {
-            Text(state.config.paused ? "NotCode — Paused" : "NotCode — Active")
+            Text(state.config.paused ? "NotCode: Paused" : "NotCode: Active")
             if let project = state.replyPoller.activeRun {
                 Text("▶️ Remote reply running in \(short(project, 24))")
                     .help(project)
@@ -48,7 +48,7 @@ struct MenuView: View {
                     .disabled(state.updating)
                 } else {
                     Button("⬇️ Download \(update)…") { state.performUpdate() }
-                    Text("Auto-update is off for this build — opens the download page")
+                    Text("Auto-update is off for this build; opens the download page")
                 }
             }
 

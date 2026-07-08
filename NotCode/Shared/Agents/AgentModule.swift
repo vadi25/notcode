@@ -23,13 +23,13 @@ enum PayloadSource {
 
 /// Everything NotCode needs to know about one supported agent. Adding an
 /// agent means writing one conforming type and appending it to
-/// `AgentRegistry.all` — settings toggles, hook install UI, per-agent sounds,
+/// `AgentRegistry.all`; settings toggles, hook install UI, per-agent sounds,
 /// and the WhatsApp reply loop all iterate the registry.
 protocol AgentModule {
     /// Display name; must match the `AgentEvent.agent` values this module emits.
     var name: String { get }
     /// Subcommands of notcode-hook this module handles. These are baked into
-    /// users' installed hook configs — never change existing strings.
+    /// users' installed hook configs; never change existing strings.
     var hookSubcommands: [String] { get }
     var payloadSource: PayloadSource { get }
     /// Caption shown in the Agents settings section.
@@ -40,6 +40,13 @@ protocol AgentModule {
     /// Whether events skip the "quiet while you're watching a terminal/IDE"
     /// filter (Cursor: its agent panel can be hidden while you code).
     var bypassesWatchingFilter: Bool { get }
+    /// The agent's CLI binary as found on PATH (e.g. "claude"). Drives
+    /// `isInstalledOnMachine` and should match what resume probing uses.
+    var cliBinaryName: String { get }
+    /// Whether the agent's CLI is present on this Mac. The default probes the
+    /// login-shell PATH (spawns a shell), so prefer calling it off the main
+    /// thread.
+    var isInstalledOnMachine: Bool { get }
 
     func hookStatus() -> HookInstaller.Status
     func installHooks() throws
@@ -64,6 +71,7 @@ protocol AgentModule {
 extension AgentModule {
     var emitsAttention: Bool { false }
     var bypassesWatchingFilter: Bool { false }
+    var isInstalledOnMachine: Bool { loginShellWhich(cliBinaryName) }
     func installPreview() throws -> String? { nil }
     func repairAfterLaunch() {}
     func resumeAvailability() -> ResumeAvailability {

@@ -104,7 +104,7 @@ final class HookInstallerMergeTests: XCTestCase {
         let subcommands = AgentRegistry.all.flatMap(\.hookSubcommands)
         XCTAssertEqual(Set(subcommands).count, subcommands.count,
                        "hook subcommands must be unique across modules")
-        // Installed hooks in the wild use these exact strings — never change them.
+        // Installed hooks in the wild use these exact strings; never change them.
         XCTAssertEqual(Set(subcommands),
                        ["claude-notification", "claude-stop", "codex", "cursor"])
         XCTAssertNil(AgentRegistry.bySubcommand("test"),

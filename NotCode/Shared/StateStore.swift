@@ -1,6 +1,6 @@
 import Foundation
 
-/// What we remember about a session that notified the user — enough to route
+/// What we remember about a session that notified the user: enough to route
 /// a WhatsApp reply back into it.
 struct SessionInfo: Codable, Equatable {
     var cwd: String?
@@ -26,6 +26,9 @@ struct NotCodeState: Codable {
     var messageMonth: String = ""
     /// Running count of inbound + outbound WhatsApp messages this month.
     var messageCount: Int = 0
+    /// Agent name → when we last received any hook event from it. Written by
+    /// the hook helper, read by the app's Status panel.
+    var lastEventByAgent: [String: Date] = [:]
 
     init() {}
 
@@ -43,6 +46,7 @@ struct NotCodeState: Codable {
         lastOutboundWhatsApp = try c.decodeIfPresent(Date.self, forKey: .lastOutboundWhatsApp)
         messageMonth = try c.decodeIfPresent(String.self, forKey: .messageMonth) ?? ""
         messageCount = try c.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
+        lastEventByAgent = try c.decodeIfPresent([String: Date].self, forKey: .lastEventByAgent) ?? [:]
     }
 }
 
@@ -97,6 +101,19 @@ enum StateStore {
         }
         save(state)
         return true
+    }
+
+    /// Remembers that an agent produced a hook event, whatever became of the
+    /// notification. Feeds the Status panel's "Last alert" line.
+    static func recordAgentEvent(_ agent: String, now: Date = Date()) {
+        var state = load()
+        state.lastEventByAgent[agent] = now
+        save(state)
+    }
+
+    /// When we last received any hook event from the named agent.
+    static func lastEvent(for agent: String) -> Date? {
+        load().lastEventByAgent[agent]
     }
 
     static func recordDeliveryProblem(_ problem: String?) {

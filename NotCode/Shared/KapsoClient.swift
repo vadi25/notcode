@@ -28,12 +28,12 @@ struct KapsoClient {
 
         var userHint: String {
             isWindowClosed
-                ? "WhatsApp 24h window closed — send any message (e.g. \"hi\") to your Kapso number from your phone to reopen it"
+                ? "WhatsApp 24h window closed. Send any message (e.g. \"hi\") to your Kapso number from your phone to reopen it"
                 : description
         }
     }
 
-    /// nil when the phone number ID can't form a valid URL — the helper must
+    /// nil when the phone number ID can't form a valid URL; the helper must
     /// return an error for that, never crash on a force-unwrap.
     var endpoint: URL? {
         let id = phoneNumberID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,7 +53,7 @@ struct KapsoClient {
             "text": ["body": body],
         ]
         guard let endpoint else {
-            return .failure(.transport("invalid WhatsApp phone number ID — check it in Settings"))
+            return .failure(.transport("invalid WhatsApp phone number ID, check it in Settings"))
         }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -75,7 +75,7 @@ struct KapsoClient {
         guard let endpoint,
               var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
         else {
-            return .failure(.transport("invalid WhatsApp phone number ID — check it in Settings"))
+            return .failure(.transport("invalid WhatsApp phone number ID, check it in Settings"))
         }
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -110,6 +110,38 @@ struct KapsoClient {
         }.sorted { $0.timestamp < $1.timestamp }
     }
 
+    /// Lightweight credentials and connectivity check: a minimal authenticated
+    /// GET on the same messages endpoint real sends use, over a tiny window.
+    /// Success means the API key and phone number ID both work; failures are
+    /// mapped to specific, user-facing hints by HTTP status.
+    func verifyConnection() -> Result<Void, SendError> {
+        guard let endpoint,
+              var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+        else {
+            return .failure(.transport("invalid WhatsApp phone number ID, check it in Settings"))
+        }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        components.queryItems = [
+            URLQueryItem(name: "direction", value: "inbound"),
+            URLQueryItem(name: "since", value: iso.string(from: Date().addingTimeInterval(-60))),
+            URLQueryItem(name: "limit", value: "1"),
+        ]
+        guard let url = components.url else {
+            return .failure(.transport("couldn't build the messages URL"))
+        }
+        switch perform(URLRequest(url: url)) {
+        case .success:
+            return .success(())
+        case .failure(.http(let status, _)) where status == 401 || status == 403:
+            return .failure(.transport("API key looks wrong, check it against your Kapso project's API Keys page"))
+        case .failure(.http(let status, _)) where status == 404 || status == 422:
+            return .failure(.transport("phone number ID looks wrong, check it in Settings"))
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
     /// Two phone spellings match when their digits match ("+34 600-111-222"
     /// == "34600111222"). Kapso's `from` and the user's configured number
     /// rarely share formatting.
@@ -119,7 +151,7 @@ struct KapsoClient {
         return !da.isEmpty && da == db
     }
 
-    /// Synchronous request with a short timeout — the hook helper is a
+    /// Synchronous request with a short timeout; the hook helper is a
     /// short-lived process and must never hang an agent session.
     private func perform(_ request: URLRequest) -> Result<Data, SendError> {
         var request = request

@@ -2,7 +2,7 @@ import Foundation
 
 /// Polls Kapso for inbound WhatsApp messages and routes them back into agent
 /// sessions ("reply to keep prompting"). Runs only while the menu bar app is
-/// open — hooks fire without the app, but replies need this poller.
+/// open: hooks fire without the app, but replies need this poller.
 @MainActor
 final class ReplyPoller: ObservableObject {
     /// Project name of the resume currently running, for the menu bar.
@@ -49,7 +49,7 @@ final class ReplyPoller: ObservableObject {
         // "Active" = within fastWindow of either the last outbound WhatsApp or
         // the last inbound message (live conversation).  Active window clamps
         // to ≤ 15 s so replies feel snappy; outside it the user's chosen
-        // cadence applies.  No upper cutoff — idle but enabled always listens.
+        // cadence applies.  No upper cutoff; idle but enabled always listens.
         let state = StateStore.load()
         let sinceOutbound = state.lastOutboundWhatsApp
             .map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
@@ -72,7 +72,7 @@ final class ReplyPoller: ObservableObject {
             // processed-id set deduplicates.
             switch client.listInboundMessages(since: since.addingTimeInterval(-30)) {
             case .failure(let error):
-                // Keep `since` where it was — a reply sent during an outage
+                // Keep `since` where it was: a reply sent during an outage
                 // must still be picked up by the next successful poll.
                 Log.append("reply loop: poll failed (\(error))")
                 return
@@ -107,7 +107,7 @@ final class ReplyPoller: ObservableObject {
         case .help:
             send(ReplyRouter.helpText(sessions: sessions))
         case .noSessions:
-            send("🤖 No agent sessions to reply to right now — start one and I'll route your next message.")
+            send("🤖 No agent sessions to reply to right now. Start one and I'll route your next message.")
         case .notFound(let prefix):
             send(ReplyRouter.notFoundText(prefix: prefix, sessions: sessions))
         case .session(let id, let prompt):
@@ -115,7 +115,7 @@ final class ReplyPoller: ObservableObject {
             let module = AgentRegistry.byName(info.agent)
             let project = info.projectName ?? "unknown"
             guard !busySessions.contains(id) else {
-                send("⏳ Still working on your last message for *\(project)* — send it again when I confirm.")
+                send("⏳ Still working on your last message for *\(project)*. Send it again when I confirm.")
                 return
             }
             guard let module else {
@@ -133,7 +133,7 @@ final class ReplyPoller: ObservableObject {
             busySessions.insert(id)
             activeRun = project
             if config.replyConfirmationsEnabled {
-                send("▶️ Sent to \(info.agent) in *\(project)* — I'll confirm when it's done.")
+                send("▶️ Sent to \(info.agent) in *\(project)*. I'll confirm when it's done.")
             }
             runResume(command: command, module: module, sessionID: id,
                       info: info, client: client, config: config)
@@ -193,7 +193,7 @@ final class ReplyPoller: ObservableObject {
                         reply += ":\n\(String(excerpt.prefix(300)))"
                     }
                 } else {
-                    reply = "⚠️ The \(info.agent) run in *\(project)* exited with an error — check the Mac."
+                    reply = "⚠️ The \(info.agent) run in *\(project)* exited with an error. Check the Mac."
                 }
             } catch {
                 reply = "⚠️ Couldn't start \(info.agent) for *\(project)*: \(error.localizedDescription)"

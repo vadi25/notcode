@@ -19,7 +19,7 @@ struct AgentEvent {
         cwd.map { ($0 as NSString).lastPathComponent }
     }
 
-    /// Short WhatsApp text — status updates only, never task results, so a
+    /// Short WhatsApp text: status updates only, never task results, so a
     /// notification stays a single cheap message.
     var whatsAppText: String {
         let location = projectName.map { " in *\($0)*" } ?? ""
@@ -33,7 +33,7 @@ struct AgentEvent {
         }
     }
 
-    /// Key used for rate limiting — same event type from the same session.
+    /// Key used for rate limiting: same event type from the same session.
     var dedupeKey: String {
         "\(agent)|\(kind.rawValue)|\(sessionID ?? cwd ?? "global")"
     }

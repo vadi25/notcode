@@ -10,6 +10,11 @@ final class AppState: ObservableObject {
     }
     let replyPoller = ReplyPoller()
     @Published var hookStatuses: [String: HookInstaller.Status] = [:]
+    /// Agent name → whether its CLI was found on the login-shell PATH.
+    /// nil (missing key) while the async probe is still running.
+    @Published var cliInstalled: [String: Bool] = [:]
+    /// Agent name → when the hook helper last received an event from it.
+    @Published var lastEventByAgent: [String: Date] = [:]
     @Published var lastNotification: String?
     @Published var lastDeliveryProblem: String?
     @Published var messageCount: Int = 0
@@ -67,6 +72,20 @@ final class AppState: ObservableObject {
         lastNotification = state.lastNotification
         lastDeliveryProblem = state.lastDeliveryProblem
         messageCount = StateStore.currentMonthMessageCount()
+        lastEventByAgent = state.lastEventByAgent
+        refreshCLIDetection()
+    }
+
+    /// Probes each agent's CLI on the login-shell PATH. Each probe spawns a
+    /// shell (slow), so it runs off the main thread and publishes when done;
+    /// the Status pane shows a spinner until then.
+    private func refreshCLIDetection() {
+        let modules = AgentRegistry.all
+        Task.detached { [weak self] in
+            let installed = Dictionary(uniqueKeysWithValues:
+                modules.map { ($0.name, $0.isInstalledOnMachine) })
+            await MainActor.run { self?.cliInstalled = installed }
+        }
     }
 
     func sendTestNotification() {
@@ -79,7 +98,7 @@ final class AppState: ObservableObject {
             let outcome = Notifier.fire(event, config: config, bypassFilters: true)
             await MainActor.run {
                 if let error = outcome.whatsAppError {
-                    self.testResult = "Sound ✓ — WhatsApp failed: \(error)"
+                    self.testResult = "Sound ✓, WhatsApp failed: \(error)"
                 } else if outcome.whatsAppSent {
                     self.testResult = "Sound ✓ WhatsApp ✓"
                 } else if outcome.soundPlayed {

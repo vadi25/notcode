@@ -34,7 +34,7 @@ struct NotCodeConfig: Codable, Equatable {
     /// Only send WhatsApp when no keyboard/mouse input for this long. 0 = always send.
     var awayOnlyWhatsApp: Bool = true
     var awayThresholdMinutes: Double = 2
-    /// Skip all notifications while the user is actively in a terminal/IDE —
+    /// Skip all notifications while the user is actively in a terminal/IDE;
     /// they're watching the agent, so every turn-end ding is noise.
     var suppressWhileWatching: Bool = true
 

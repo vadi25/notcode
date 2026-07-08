@@ -1,14 +1,14 @@
 import Foundation
 
-// notcode-hook — invoked by the agents' own hook mechanisms; each subcommand
+// notcode-hook, invoked by the agents' own hook mechanisms; each subcommand
 // belongs to one AgentModule in the registry. Must always exit 0 quickly, and
-// never write JSON to stdout — Cursor would interpret a followup_message as an
+// never write JSON to stdout: Cursor would interpret a followup_message as an
 // instruction to keep the agent going.
 
 /// Env markers each agent CLI exports to the processes it spawns. Because
 /// environment variables flow parent -> child only, a hook whose environment
 /// carries a marker for an agent *other than the one firing* must be running
-/// nested inside that other agent — e.g. a `codex` launched mid-task by a
+/// nested inside that other agent, e.g. a `codex` launched mid-task by a
 /// Claude Code session inherits CLAUDECODE. The outermost agent already reports
 /// for the whole turn, so these nested sub-invocations stay quiet.
 private let agentAncestorMarkers: [(agent: String, keys: [String])] = [

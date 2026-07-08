@@ -1,6 +1,6 @@
 import AppKit
 
-/// Detects "the user is sitting right there watching the agent work" — the
+/// Detects "the user is sitting right there watching the agent work", the
 /// case where any notification is just noise. Frontmost terminal/IDE plus
 /// recent keyboard/mouse input means they'll see the turn end themselves.
 enum FocusDetector {

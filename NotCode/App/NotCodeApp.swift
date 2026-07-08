@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = """
         Your menu bar looks full, and macOS hides the leftmost icons when \
         space runs out (especially around the notch). NotCode keeps working \
-        either way — notifications don't need the icon.
+        either way; notifications don't need the icon.
 
         To see the bell, quit a menu bar app you don't use. And you can open \
         NotCode again anytime (Spotlight or Applications) to get this window \
