@@ -21,6 +21,9 @@ final class AppState: ObservableObject {
     @Published var testResult: String?
     @Published var availableUpdate: String?   // e.g. "v1.0.1"
     @Published var updating = false
+    /// Whether macOS sleep is switched off system-wide (`pmset disablesleep`).
+    @Published var sleepDisabled = false
+    @Published var sleepError: String?
 
     private var updateTimer: Timer?
 
@@ -74,6 +77,30 @@ final class AppState: ObservableObject {
         messageCount = StateStore.currentMonthMessageCount()
         lastEventByAgent = state.lastEventByAgent
         refreshCLIDetection()
+        refreshSleepSetting()
+    }
+
+    /// Re-reads the sleep switch, which a terminal (`pmset`) can flip at any time.
+    private func refreshSleepSetting() {
+        Task.detached { [weak self] in
+            let disabled = SleepSetting.current()
+            await MainActor.run { self?.sleepDisabled = disabled }
+        }
+    }
+
+    /// Flips system sleep. macOS asks for an administrator password; cancelling
+    /// that prompt leaves everything as it was.
+    func toggleSleep() {
+        do {
+            try SleepSetting.set(disabled: !sleepDisabled)
+            sleepError = nil
+        } catch SleepSetting.ChangeError.cancelled {
+            sleepError = nil
+        } catch {
+            Log.append("sleep toggle failed: \(error)")
+            sleepError = "Could not change sleep: \(error.localizedDescription)"
+        }
+        refreshSleepSetting()
     }
 
     /// Probes each agent's CLI on the login-shell PATH. Each probe spawns a
