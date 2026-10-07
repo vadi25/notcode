@@ -25,12 +25,24 @@ struct MenuView: View {
                 Text("⚠️ \(short(problem))")
                     .help(problem)
             }
+            if state.sleepDisabled {
+                Text("☕ Mac won't sleep, even with the lid closed")
+            }
+            if let sleepError = state.sleepError {
+                Text("⚠️ \(short(sleepError))")
+                    .help(sleepError)
+            }
 
             Divider()
 
             Button(state.config.paused ? "Resume Notifications" : "Pause Notifications") {
                 state.config.paused.toggle()
             }
+
+            Button(state.sleepDisabled ? "Let Mac Sleep" : "Keep Mac Awake") {
+                state.toggleSleep()
+            }
+            .help("Switches macOS sleep off or on for the whole system (pmset disablesleep). Asks for your password.")
 
             Button("Test: Sound + WhatsApp to Me") {
                 state.sendTestNotification()

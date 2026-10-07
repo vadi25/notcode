@@ -453,3 +453,25 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(config.hasKapsoCredentials)
     }
 }
+
+final class SleepSettingTests: XCTestCase {
+    func testDisabledWhenPmsetReportsOne() {
+        let output = """
+        System-wide power settings:
+         SleepDisabled\t\t1
+        Currently in use:
+         sleep                1 (sleep prevented by caffeinate)
+        """
+        XCTAssertTrue(SleepSetting.isDisabled(pmsetOutput: output))
+    }
+
+    func testEnabledWhenPmsetReportsZero() {
+        XCTAssertFalse(SleepSetting.isDisabled(pmsetOutput: " SleepDisabled\t\t0\n sleep 1"))
+    }
+
+    func testEnabledWhenTheSwitchWasNeverSet() {
+        let output = "Currently in use:\n sleep                1\n displaysleep         10"
+        XCTAssertFalse(SleepSetting.isDisabled(pmsetOutput: output),
+                       "no SleepDisabled line means the switch was never touched")
+    }
+}
