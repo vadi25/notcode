@@ -39,6 +39,27 @@ func run() {
     }
     let subcommand = arguments[1]
 
+    // Built-in MCP Hub subcommands (mcphub-style stdio gateway & CLI sync).
+    if subcommand == "mcp-gateway" {
+        var projectPath: String?
+        if let idx = arguments.firstIndex(of: "--project"), idx + 1 < arguments.count {
+            projectPath = arguments[idx + 1]
+        }
+        MCPGateway.run(projectPath: projectPath)
+        return
+    }
+    if subcommand == "mcp-sync" {
+        var pool = MCPPoolStore.load()
+        if arguments.count >= 3, let target = pool.profile(named: arguments[2]) {
+            pool.activeProfileID = target.id
+        }
+        let report = MCPSyncer.sync(pool: pool)
+        pool.lastSyncDate = report.syncedAt
+        try? MCPPoolStore.save(pool)
+        Log.append("mcp-sync: profile=\(report.profileName) \(report.succeededCount)/\(report.results.count) apps synced")
+        return
+    }
+
     let event: AgentEvent?
     if let module = AgentRegistry.bySubcommand(subcommand) {
         let payload: Data
@@ -67,6 +88,17 @@ func run() {
     if nestedUnderOtherAgent(event.agent, env: ProcessInfo.processInfo.environment) {
         Log.append("hook: \(event.dedupeKey) suppressed (nested under another agent)")
         return
+    }
+
+    // If the user enabled per-project profile prompts and this workspace isn't
+    // bound yet, signal the menu bar app to ask which MCP profile to use.
+    if let cwd = event.cwd, !cwd.isEmpty {
+        let pool = MCPPoolStore.load()
+        if pool.askProfileForNewProjects,
+           pool.profiles.count > 1,
+           pool.binding(forProjectPath: cwd) == nil {
+            PendingProfilePromptStore.write(PendingProfilePrompt(projectPath: cwd, agent: event.agent))
+        }
     }
 
     let outcome = Notifier.fire(event, blockingSound: true)

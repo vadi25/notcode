@@ -35,6 +35,31 @@ struct MenuView: View {
 
             Divider()
 
+            Menu("MCP Profile: \(state.mcpPool.activeProfile.name)") {
+                ForEach(state.mcpPool.profiles) { profile in
+                    Button {
+                        state.switchProfile(profile.id, syncImmediately: true)
+                    } label: {
+                        let count = state.mcpPool.resolvedServers(for: profile).count
+                        let mark = profile.id == state.mcpPool.activeProfileID ? "✓ " : ""
+                        Text("\(mark)\(profile.name) (\(count) MCPs)")
+                    }
+                }
+                Divider()
+                Button("Sync All Apps Now") {
+                    state.syncMCPs()
+                }
+                Button("Scan & Import MCPs") {
+                    state.scanMCPs()
+                }
+            }
+            if let mcpMsg = state.mcpStatusMessage {
+                Text("MCP: \(short(mcpMsg))")
+                    .help(mcpMsg)
+            }
+
+            Divider()
+
             Button(state.config.paused ? "Resume Notifications" : "Pause Notifications") {
                 state.config.paused.toggle()
             }
@@ -62,6 +87,11 @@ struct MenuView: View {
                     Button("⬇️ Download \(update)…") { state.performUpdate() }
                     Text("Auto-update is off for this build; opens the download page")
                 }
+            } else {
+                Button(state.updateStatus == .checking ? "Checking for Updates…" : "Check for Updates…") {
+                    state.checkForUpdates(userInitiated: true)
+                }
+                .disabled(state.updateStatus == .checking)
             }
 
             Divider()

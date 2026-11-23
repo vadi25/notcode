@@ -15,17 +15,55 @@ enum UpdateChecker {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
-    /// Returns the newer remote version string, or nil if up to date.
-    static func checkForUpdate() async -> String? {
+    struct ReleaseInfo: Equatable {
+        let version: String
+        let notes: String
+        let publishedAt: Date?
+        let htmlURL: URL
+    }
+
+    /// Returns rich release metadata if a newer version exists on GitHub, or nil if up to date.
+    static func checkForUpdateInfo() async -> Result<ReleaseInfo?, Error> {
         var request = URLRequest(
             url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 10
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tag = object["tag_name"] as? String
-        else { return nil }
-        return VersionCompare.isNewer(tag, than: currentVersion) ? tag : nil
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return .failure(NSError(domain: "NotCode", code: http.statusCode, userInfo: [
+                    NSLocalizedDescriptionKey: "GitHub returned HTTP \(http.statusCode)"
+                ]))
+            }
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tag = object["tag_name"] as? String
+            else {
+                return .success(nil)
+            }
+            guard VersionCompare.isNewer(tag, than: currentVersion) else {
+                return .success(nil)
+            }
+            let body = (object["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let published = (object["published_at"] as? String).flatMap {
+                ISO8601DateFormatter().date(from: $0)
+            }
+            let htmlURL = (object["html_url"] as? String).flatMap(URL.init(string:)) ?? releasesPage
+            return .success(ReleaseInfo(
+                version: tag,
+                notes: body.isEmpty ? "No release notes provided." : body,
+                publishedAt: published,
+                htmlURL: htmlURL))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Returns the newer remote version string, or nil if up to date.
+    static func checkForUpdate() async -> String? {
+        if case .success(let info) = await checkForUpdateInfo() {
+            return info?.version
+        }
+        return nil
     }
 
     /// Only self-swap when running from /Applications; a dev build launched

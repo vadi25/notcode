@@ -12,6 +12,8 @@ enum Paths {
 
     static var config: URL { appSupport.appendingPathComponent("config.json") }
     static var state: URL { appSupport.appendingPathComponent("state.json") }
+    static var mcpPool: URL { appSupport.appendingPathComponent("mcp-pool.json") }
+    static var pendingProfilePrompt: URL { appSupport.appendingPathComponent("pending-profile-prompt.json") }
     static var installedHelper: URL { appSupport.appendingPathComponent("notcode-hook") }
     static var installedSounds: URL { appSupport.appendingPathComponent("Sounds", isDirectory: true) }
 

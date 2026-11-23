@@ -475,3 +475,309 @@ final class SleepSettingTests: XCTestCase {
                        "no SleepDisabled line means the switch was never touched")
     }
 }
+
+// MARK: - MCP Hub, Auth Extraction, Profiles & Gateway Tests
+
+final class MCPHubTests: XCTestCase {
+    func testCodexTOMLParseAndPreserveNonMCPSections() {
+        let toml = """
+        model = "gpt-5"
+        notify = ["/usr/local/bin/notcode-hook", "codex"]
+
+        [tui]
+        notifications = true
+
+        [mcp_servers.firecrawl]
+        url = "https://mcp.firecrawl.dev/mcp"
+        bearer_token_env_var = "FIRECRAWL_API_KEY"
+
+        [mcp_servers.aws-mcp]
+        command = "uvx"
+        args = ["mcp-proxy-for-aws@latest", "https://aws-mcp.us-east-1.api.aws/mcp"]
+
+        [mcp_servers.aws-mcp.env]
+        AWS_PROFILE = "work-admin"
+        """
+
+        let parsed = MCPClientConfigIO.parseCodexTOML(toml, source: "Codex")
+        XCTAssertEqual(parsed.count, 2)
+
+        let aws = parsed.first { $0.name == "aws-mcp" }
+        XCTAssertEqual(aws?.transport, .stdio)
+        XCTAssertEqual(aws?.command, "uvx")
+        XCTAssertEqual(aws?.args.count, 2)
+        XCTAssertEqual(aws?.env["AWS_PROFILE"], "work-admin")
+
+        let firecrawl = parsed.first { $0.name == "firecrawl" }
+        XCTAssertEqual(firecrawl?.transport, .http)
+        XCTAssertEqual(firecrawl?.bearerTokenEnvVar, "FIRECRAWL_API_KEY")
+        XCTAssertTrue(firecrawl?.hasExtractedAuth == true)
+
+        // Writing back must preserve `model`, `notify`, and `[tui]`.
+        let updated = MCPClientConfigIO.replaceCodexMCPServers(in: toml, with: [firecrawl!])
+        XCTAssertTrue(updated.contains("model = \"gpt-5\""))
+        XCTAssertTrue(updated.contains("notify = [\"/usr/local/bin/notcode-hook\", \"codex\"]"))
+        XCTAssertTrue(updated.contains("[tui]"))
+        XCTAssertTrue(updated.contains("[mcp_servers.firecrawl]"))
+        XCTAssertFalse(updated.contains("[mcp_servers.aws-mcp]"))
+    }
+
+    func testScanExtractsAuthAndCreatesProfileVariantOnConflict() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notcode-mcp-scan-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let claudeFile = tmp.appendingPathComponent("claude.json")
+        let cursorFile = tmp.appendingPathComponent("cursor.json")
+
+        let claudeJSON = """
+        {
+          "mcpServers": {
+            "linear": {
+              "type": "http",
+              "url": "https://mcp.linear.app/mcp",
+              "headers": { "Authorization": "Bearer personal-token-1234" }
+            }
+          }
+        }
+        """
+        let cursorJSON = """
+        {
+          "mcpServers": {
+            "linear": {
+              "type": "http",
+              "url": "https://mcp.linear.app/mcp",
+              "headers": { "Authorization": "Bearer work-token-9999" }
+            },
+            "aws-mcp": {
+              "command": "uvx",
+              "args": ["mcp-proxy-for-aws"]
+            }
+          }
+        }
+        """
+        try claudeJSON.write(to: claudeFile, atomically: true, encoding: .utf8)
+        try cursorJSON.write(to: cursorFile, atomically: true, encoding: .utf8)
+
+        var pool = MCPPool()
+        let report = MCPScanner.scanAll(
+            into: &pool,
+            apps: [.claudeCode, .cursor],
+            urlOverrides: [.claudeCode: claudeFile, .cursor: cursorFile])
+
+        XCTAssertEqual(report.totalInPool, 2)
+        XCTAssertEqual(report.authVariantsCreated, 1, "conflicting auth must become a profile override")
+
+        let linear = pool.servers.first { $0.name == "linear" }
+        XCTAssertEqual(linear?.headers["Authorization"], "Bearer personal-token-1234")
+        XCTAssertEqual(Set(linear?.sources ?? []), ["Claude Code", "Cursor"])
+
+        let variantProfile = pool.profiles.first { $0.name == "Cursor Account" }
+        XCTAssertNotNil(variantProfile)
+        let resolvedVariant = pool.resolvedServers(for: variantProfile)
+        XCTAssertEqual(resolvedVariant.first?.headers["Authorization"], "Bearer work-token-9999")
+    }
+
+    func testProjectBindingAndLongestPrefixResolution() {
+        var pool = MCPPool()
+        let personal = pool.profile(named: "Personal")!
+        let work = pool.profile(named: "Work")!
+
+        pool.bindProject("/Users/me/code", to: personal.id)
+        pool.bindProject("/Users/me/code/work-app", to: work.id)
+
+        let (p1, bound1) = pool.effectiveProfile(forProjectPath: "/Users/me/code/work-app/web")
+        XCTAssertTrue(bound1)
+        XCTAssertEqual(p1.id, work.id, "more specific project path must win")
+
+        let (p2, bound2) = pool.effectiveProfile(forProjectPath: "/Users/me/code/side-project")
+        XCTAssertTrue(bound2)
+        XCTAssertEqual(p2.id, personal.id)
+
+        let (p3, bound3) = pool.effectiveProfile(forProjectPath: "/tmp/random")
+        XCTAssertFalse(bound3)
+        XCTAssertEqual(p3.id, pool.activeProfileID)
+    }
+
+    func testSyncDirectAndGatewayModes() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notcode-mcp-sync-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let cursorFile = tmp.appendingPathComponent("cursor.json")
+        try #"{"unrelatedKey": true, "mcpServers": {}}"#.write(to: cursorFile, atomically: true, encoding: .utf8)
+
+        var pool = MCPPool()
+        pool.enabledSyncApps = [.cursor]
+        pool.servers = [
+            MCPServerEntry(name: "github", transport: .http, url: "https://mcp.github.com",
+                           headers: ["Authorization": "Bearer default-pat"], sources: ["Manual"])
+        ]
+        let work = pool.profile(named: "Work")!
+        pool.setServer("github", enabled: true, in: work.id)
+        if let idx = pool.profiles.firstIndex(where: { $0.id == work.id }) {
+            pool.profiles[idx].overrides["github"] = MCPCredentialOverride(
+                headers: ["Authorization": "Bearer work-pat"])
+        }
+
+        // Direct sync with Work profile should write work-pat and preserve unrelatedKey.
+        let updatedWork = pool.profile(named: "Work")!
+        pool.syncMode = .direct
+        let directReport = MCPSyncer.sync(pool: pool, profile: updatedWork, urlOverrides: [.cursor: cursorFile])
+        XCTAssertEqual(directReport.succeededCount, 1)
+
+        let raw = try Data(contentsOf: cursorFile)
+        let parsed = try JSONSerialization.jsonObject(with: raw) as! [String: Any]
+        XCTAssertEqual(parsed["unrelatedKey"] as? Bool, true)
+        let mcpServers = parsed["mcpServers"] as! [String: Any]
+        let gh = mcpServers["github"] as! [String: Any]
+        let headers = gh["headers"] as! [String: String]
+        XCTAssertEqual(headers["Authorization"], "Bearer work-pat")
+
+        // Gateway sync should write a single `notcode-hub` entry.
+        pool.syncMode = .gateway
+        let gwReport = MCPSyncer.sync(pool: pool, profile: work, urlOverrides: [.cursor: cursorFile])
+        XCTAssertEqual(gwReport.succeededCount, 1)
+        let gwParsed = try JSONSerialization.jsonObject(with: Data(contentsOf: cursorFile)) as! [String: Any]
+        let gwServers = gwParsed["mcpServers"] as! [String: Any]
+        XCTAssertEqual(Array(gwServers.keys), ["notcode-hub"])
+    }
+
+    func testMCPGatewayProtocolInitializeAndProfileSelection() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notcode-mcp-gw-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        var pool = MCPPool()
+        pool.enabledSyncApps = [] // keep test isolated from host filesystem
+        pool.askProfileForNewProjects = true // off by default; this test covers the ask path
+        try MCPPoolStore.save(pool, to: tmp)
+
+        // 1. initialize
+        let initReq = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#
+        let initResp = MCPGateway.handleMessage(Data(initReq.utf8), defaultProjectPath: "/tmp/new-proj", poolURL: tmp)
+        XCTAssertEqual(initResp?["id"] as? Int, 1)
+        let initResult = initResp?["result"] as? [String: Any]
+        XCTAssertEqual(initResult?["protocolVersion"] as? String, MCPGateway.protocolVersion)
+
+        // 2. tools/list
+        let listReq = #"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#
+        let listResp = MCPGateway.handleMessage(Data(listReq.utf8), defaultProjectPath: "/tmp/new-proj", poolURL: tmp)
+        let tools = (listResp?["result"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []
+        let toolNames = tools.compactMap { $0["name"] as? String }
+        XCTAssertTrue(toolNames.contains("notcode_get_profile"))
+        XCTAssertTrue(toolNames.contains("notcode_set_profile"))
+
+        // 3. notcode_get_profile on unbound project prompts agent to ask user
+        let getReq = #"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"notcode_get_profile","arguments":{}}}"#
+        let getResp = MCPGateway.handleMessage(Data(getReq.utf8), defaultProjectPath: "/tmp/new-proj", poolURL: tmp)
+        let content = ((getResp?["result"] as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String ?? ""
+        XCTAssertTrue(content.contains("NOT bound"))
+
+        // 4. notcode_set_profile binds project to Work
+        let setReq = #"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"notcode_set_profile","arguments":{"profile":"Work","rememberForProject":true,"syncApps":false}}}"#
+        _ = MCPGateway.handleMessage(Data(setReq.utf8), defaultProjectPath: "/tmp/new-proj", poolURL: tmp)
+
+        let reloaded = MCPPoolStore.load(from: tmp)
+        let (effective, isBound) = reloaded.effectiveProfile(forProjectPath: "/tmp/new-proj")
+        XCTAssertTrue(isBound)
+        XCTAssertEqual(effective.name, "Work")
+    }
+
+    // MARK: Sync safety
+
+    private func makeTempDir() throws -> URL {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notcode-mcp-safety-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        return tmp
+    }
+
+    private func posixMode(_ url: URL) -> Int {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions]) as? Int) ?? -1
+    }
+
+    func testSyncKeepsUnmanagedServersExtraKeysAndWritesOwnerOnlyBackups() throws {
+        let tmp = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cursorFile = tmp.appendingPathComponent("mcp.json")
+        let original = #"{"mcpServers": {"hand-added": {"command": "my-tool"}, "github": {"url": "https://old.example", "disabled": true}}}"#
+        try original.write(to: cursorFile, atomically: true, encoding: .utf8)
+
+        var pool = MCPPool()
+        pool.enabledSyncApps = [.cursor]
+        pool.servers = [
+            MCPServerEntry(name: "github", transport: .http, url: "https://new.example",
+                           headers: ["Authorization": "Bearer fake-test-value"], sources: ["Manual"])
+        ]
+        let report = MCPSyncer.sync(pool: pool, urlOverrides: [.cursor: cursorFile])
+        XCTAssertEqual(report.succeededCount, 1)
+
+        let parsed = try JSONSerialization.jsonObject(with: Data(contentsOf: cursorFile)) as! [String: Any]
+        let servers = parsed["mcpServers"] as! [String: Any]
+        XCTAssertNotNil(servers["hand-added"], "a server the pool does not know must survive a sync")
+        let gh = servers["github"] as! [String: Any]
+        XCTAssertEqual(gh["url"] as? String, "https://new.example")
+        XCTAssertEqual(gh["disabled"] as? Bool, true, "unmodeled per-server keys must survive")
+        XCTAssertEqual(posixMode(cursorFile), 0o600)
+
+        let backups = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
+            .filter { $0.hasPrefix("mcp.json.notcode-mcp-backup-") }
+        XCTAssertEqual(backups.count, 1)
+        let backupURL = tmp.appendingPathComponent(backups[0])
+        XCTAssertEqual(try String(contentsOf: backupURL, encoding: .utf8), original)
+        XCTAssertEqual(posixMode(backupURL), 0o600)
+
+        // A second sync with nothing to change writes no file and no backup.
+        _ = MCPSyncer.sync(pool: pool, urlOverrides: [.cursor: cursorFile])
+        let after = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
+            .filter { $0.hasPrefix("mcp.json.notcode-mcp-backup-") }
+        XCTAssertEqual(after.count, 1)
+    }
+
+    func testSyncRefusesToOverwriteUnparseableConfig() throws {
+        let tmp = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let vscodeFile = tmp.appendingPathComponent("mcp.json")
+        let jsonc = "{\n  // my servers\n  \"servers\": {},\n}\n"
+        try jsonc.write(to: vscodeFile, atomically: true, encoding: .utf8)
+
+        var pool = MCPPool()
+        pool.enabledSyncApps = [.vscode]
+        pool.servers = [MCPServerEntry(name: "x", transport: .stdio, command: "x", sources: ["Manual"])]
+        let report = MCPSyncer.sync(pool: pool, urlOverrides: [.vscode: vscodeFile])
+        XCTAssertEqual(report.succeededCount, 0)
+        XCTAssertEqual(try String(contentsOf: vscodeFile, encoding: .utf8), jsonc)
+    }
+
+    func testCodexSyncKeepsUnmanagedAndUnchangedBlocks() {
+        let toml = """
+        model = "gpt-5"
+
+        [mcp_servers.mine]
+        command = "my-tool"
+
+        [mcp_servers.linear]
+        url = "https://mcp.linear.app/mcp"
+        startup_timeout_sec = 30
+        """
+        let linear = MCPClientConfigIO.parseCodexTOML(toml, source: "Codex").first { $0.name == "linear" }!
+        let out = MCPClientConfigIO.replaceCodexMCPServers(
+            in: toml, with: [linear], managedNames: ["linear"])
+        XCTAssertTrue(out.contains("[mcp_servers.mine]"), "unmanaged block must be kept")
+        XCTAssertTrue(out.contains("startup_timeout_sec = 30"), "unchanged block must be kept verbatim")
+    }
+
+    func testEndpointPreviewRedactsSecretArgs() {
+        let entry = MCPServerEntry(
+            name: "remote", transport: .stdio, command: "npx",
+            args: ["-y", "mcp-remote", "https://x.example/mcp?api_key=fake", "--header",
+                   "Authorization: Bearer fake-value", "--api-key", "fake-value-2", "--token=fake-3"],
+            sources: ["Manual"])
+        let preview = entry.endpointPreview
+        XCTAssertFalse(preview.contains("fake"), preview)
+        XCTAssertTrue(preview.contains("mcp-remote"))
+    }
+}

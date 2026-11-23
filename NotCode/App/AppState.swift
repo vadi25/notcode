@@ -1,5 +1,14 @@
 import Foundation
 import SwiftUI
+import AppKit
+
+enum UpdateCheckStatus: Equatable {
+    case idle
+    case checking
+    case upToDate(Date)
+    case available(UpdateChecker.ReleaseInfo)
+    case failed(String)
+}
 
 final class AppState: ObservableObject {
     @Published var config: NotCodeConfig {
@@ -8,6 +17,14 @@ final class AppState: ObservableObject {
             Task { @MainActor in self.replyPoller.reconfigure(self.config) }
         }
     }
+    @Published var mcpPool: MCPPool {
+        didSet {
+            guard !suppressPoolSave else { return }
+            try? MCPPoolStore.save(mcpPool)
+        }
+    }
+    private var suppressPoolSave = false
+
     let replyPoller = ReplyPoller()
     @Published var hookStatuses: [String: HookInstaller.Status] = [:]
     /// Agent name → whether its CLI was found on the login-shell PATH.
@@ -19,34 +36,86 @@ final class AppState: ObservableObject {
     @Published var lastDeliveryProblem: String?
     @Published var messageCount: Int = 0
     @Published var testResult: String?
-    @Published var availableUpdate: String?   // e.g. "v1.0.1"
+
+    // Updates
+    @Published var availableUpdate: String?   // e.g. "v1.4.1"
+    @Published var availableRelease: UpdateChecker.ReleaseInfo?
+    @Published var updateStatus: UpdateCheckStatus = .idle
     @Published var updating = false
+
+    // Sleep
     /// Whether macOS sleep is switched off system-wide (`pmset disablesleep`).
     @Published var sleepDisabled = false
     @Published var sleepError: String?
 
+    // MCP Hub
+    @Published var mcpScanning = false
+    @Published var mcpScanReport: MCPScanReport?
+    @Published var mcpSyncReport: MCPSyncReport?
+    @Published var mcpStatusMessage: String?
+
+    // Efficiency: throttle slow subprocess probes so opening the menu bar is instant.
+    private var lastCLIProbeAt: Date?
+    private var lastSleepProbeAt: Date?
+    private let cliProbeTTL: TimeInterval = 300
+    private let sleepProbeTTL: TimeInterval = 15
+
     private var updateTimer: Timer?
+    private var profilePromptTimer: Timer?
+    /// Projects already prompted during this app session so we never nag twice.
+    private var promptedProjectsThisSession: Set<String> = []
 
     init() {
         config = ConfigStore.load()
-        refresh()
+        mcpPool = MCPPoolStore.load()
+        refresh(forceProbes: true)
         Task { @MainActor in self.replyPoller.reconfigure(self.config) }
         checkForUpdates()
         updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
             self?.checkForUpdates()
         }
+        // Lightweight file-existence check for unbound project profile prompts.
+        profilePromptTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
+            self?.checkPendingProfilePrompt()
+        }
+        // First-time non-destructive auto-discovery of existing MCPs & auth.
+        if mcpPool.lastScanDate == nil {
+            scanMCPs()
+        }
     }
 
-    func checkForUpdates() {
+    // MARK: - Updates
+
+    func checkForUpdates(userInitiated: Bool = false) {
+        if userInitiated {
+            updateStatus = .checking
+        }
         Task {
-            let newer = await UpdateChecker.checkForUpdate()
-            await MainActor.run { self.availableUpdate = newer }
+            let result = await UpdateChecker.checkForUpdateInfo()
+            await MainActor.run {
+                switch result {
+                case .success(let release):
+                    if let release {
+                        self.availableRelease = release
+                        self.availableUpdate = release.version
+                        self.updateStatus = .available(release)
+                    } else {
+                        self.availableRelease = nil
+                        self.availableUpdate = nil
+                        self.updateStatus = .upToDate(Date())
+                    }
+                case .failure(let error):
+                    if userInitiated {
+                        self.updateStatus = .failed(error.localizedDescription)
+                    }
+                }
+            }
         }
     }
 
     func performUpdate() {
         guard UpdateChecker.canSelfUpdate else {
-            NSWorkspace.shared.open(UpdateChecker.releasesPage)
+            NSWorkspace.shared.open(availableRelease?.htmlURL ?? UpdateChecker.releasesPage)
             return
         }
         updating = true
@@ -63,11 +132,20 @@ final class AppState: ObservableObject {
         }
     }
 
-    func refresh() {
-        // Pick up external edits (helper, another instance) instead of
-        // clobbering them with our stale in-memory copy on the next save.
+    // MARK: - Refresh (fast path + throttled subprocesses)
+
+    func refresh(forceProbes: Bool = false) {
+        // Pick up external edits (helper, MCP gateway, another instance) instead
+        // of clobbering them with our stale in-memory copy on the next save.
         let onDisk = ConfigStore.load()
         if onDisk != config { config = onDisk }
+
+        let poolOnDisk = MCPPoolStore.load()
+        if poolOnDisk != mcpPool {
+            suppressPoolSave = true
+            mcpPool = poolOnDisk
+            suppressPoolSave = false
+        }
 
         hookStatuses = Dictionary(uniqueKeysWithValues:
             AgentRegistry.all.map { ($0.name, $0.hookStatus()) })
@@ -76,8 +154,16 @@ final class AppState: ObservableObject {
         lastDeliveryProblem = state.lastDeliveryProblem
         messageCount = StateStore.currentMonthMessageCount()
         lastEventByAgent = state.lastEventByAgent
-        refreshCLIDetection()
-        refreshSleepSetting()
+
+        let now = Date()
+        if forceProbes || lastCLIProbeAt == nil || now.timeIntervalSince(lastCLIProbeAt!) > cliProbeTTL {
+            lastCLIProbeAt = now
+            refreshCLIDetection()
+        }
+        if forceProbes || lastSleepProbeAt == nil || now.timeIntervalSince(lastSleepProbeAt!) > sleepProbeTTL {
+            lastSleepProbeAt = now
+            refreshSleepSetting()
+        }
     }
 
     /// Re-reads the sleep switch, which a terminal (`pmset`) can flip at any time.
@@ -100,12 +186,12 @@ final class AppState: ObservableObject {
             Log.append("sleep toggle failed: \(error)")
             sleepError = "Could not change sleep: \(error.localizedDescription)"
         }
+        lastSleepProbeAt = Date()
         refreshSleepSetting()
     }
 
     /// Probes each agent's CLI on the login-shell PATH. Each probe spawns a
-    /// shell (slow), so it runs off the main thread and publishes when done;
-    /// the Status pane shows a spinner until then.
+    /// shell (slow), so it runs off the main thread and is cached for 5 minutes.
     private func refreshCLIDetection() {
         let modules = AgentRegistry.all
         Task.detached { [weak self] in
@@ -114,6 +200,79 @@ final class AppState: ObservableObject {
             await MainActor.run { self?.cliInstalled = installed }
         }
     }
+
+    // MARK: - MCP Hub Operations
+
+    func scanMCPs() {
+        guard !mcpScanning else { return }
+        mcpScanning = true
+        mcpStatusMessage = "Scanning installed AI apps…"
+        var workingPool = mcpPool
+        Task.detached { [weak self] in
+            let report = MCPScanner.scanAll(into: &workingPool)
+            await MainActor.run {
+                guard let self else { return }
+                self.mcpPool = workingPool
+                self.mcpScanReport = report
+                self.mcpScanning = false
+                let variantsNote = report.authVariantsCreated > 0
+                    ? " · \(report.authVariantsCreated) auth variant profile\(report.authVariantsCreated == 1 ? "" : "s") created"
+                    : ""
+                self.mcpStatusMessage = "Found \(report.totalInPool) MCPs (\(report.newlyAdded) new)\(variantsNote)"
+            }
+        }
+    }
+
+    func syncMCPs(profile: MCPProfile? = nil) {
+        let currentPool = mcpPool
+        let target = profile ?? currentPool.activeProfile
+        mcpStatusMessage = "Syncing \(target.name)…"
+        Task.detached { [weak self] in
+            let report = MCPSyncer.sync(pool: currentPool, profile: target)
+            await MainActor.run {
+                guard let self else { return }
+                self.mcpSyncReport = report
+                self.mcpPool.lastSyncDate = report.syncedAt
+                if report.failedResults.isEmpty {
+                    self.mcpStatusMessage = "Synced '\(report.profileName)' to \(report.succeededCount) app\(report.succeededCount == 1 ? "" : "s") ✓"
+                } else {
+                    let failedNames = report.failedResults.map(\.app.shortName).joined(separator: ", ")
+                    self.mcpStatusMessage = "Synced \(report.succeededCount)/\(report.results.count) (failed: \(failedNames))"
+                }
+            }
+        }
+    }
+
+    func switchProfile(_ profileID: UUID, syncImmediately: Bool = true) {
+        guard let target = mcpPool.profile(byID: profileID) else { return }
+        mcpPool.activeProfileID = target.id
+        if syncImmediately {
+            syncMCPs(profile: target)
+        }
+    }
+
+    func bindProject(_ path: String, to profileID: UUID, activateAndSync: Bool = true) {
+        mcpPool.bindProject(path, to: profileID)
+        if activateAndSync {
+            switchProfile(profileID, syncImmediately: true)
+        }
+    }
+
+    func checkPendingProfilePrompt() {
+        guard mcpPool.askProfileForNewProjects,
+              let pending = PendingProfilePromptStore.consume()
+        else { return }
+        let normalized = URL(fileURLWithPath: pending.projectPath).standardizedFileURL.path
+        guard mcpPool.binding(forProjectPath: normalized) == nil,
+              !promptedProjectsThisSession.contains(normalized)
+        else { return }
+        promptedProjectsThisSession.insert(normalized)
+        Task { @MainActor in
+            ProfilePromptController.shared.show(for: pending, state: self)
+        }
+    }
+
+    // MARK: - Notifications & Hooks
 
     func sendTestNotification() {
         testResult = "Sending…"

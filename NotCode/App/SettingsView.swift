@@ -6,6 +6,8 @@ import ServiceManagement
 
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case status = "Status"
+    case mcpHub = "MCP Hub"
+    case profiles = "Profiles"
     case whatsApp = "WhatsApp"
     case sounds = "Sounds"
     case behavior = "Behavior"
@@ -17,6 +19,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .status: return "waveform.path.ecg"
+        case .mcpHub: return "square.stack.3d.up.fill"
+        case .profiles: return "person.crop.rectangle.stack.fill"
         case .whatsApp: return "message.fill"
         case .sounds: return "speaker.wave.2.fill"
         case .behavior: return "gearshape.fill"
@@ -28,6 +32,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .status: return .teal
+        case .mcpHub: return .purple
+        case .profiles: return .cyan
         case .whatsApp: return .green
         case .sounds: return .pink
         case .behavior: return .blue
@@ -39,6 +45,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .status: return "Is everything working? Check here"
+        case .mcpHub: return "Unified MCP pool, auto-extracted auth, and cross-app sync"
+        case .profiles: return "Personal, Work, and per-project MCP profiles"
         case .whatsApp: return "Phone notifications and the reply loop"
         case .sounds: return "Alert sounds, volume, and per-agent voices"
         case .behavior: return "When and how NotCode notifies you"
@@ -74,7 +82,7 @@ struct SettingsView: View {
             }
             .animation(.easeOut(duration: 0.18), value: selection)
         }
-        .frame(width: 760, height: 560)
+        .frame(width: 840, height: 610)
         .onAppear {
             state.refresh()
             // Menu bar apps have no dock presence; without this the settings
@@ -91,6 +99,8 @@ struct SettingsView: View {
                             tint: section.tint) {
             switch section {
             case .status: StatusSettings()
+            case .mcpHub: MCPHubSettings()
+            case .profiles: ProfilesSettings()
             case .whatsApp: WhatsAppSettings()
             case .sounds: SoundsSettings()
             case .behavior: BehaviorSettings()
@@ -110,6 +120,7 @@ struct StatusSettings: View {
     @EnvironmentObject private var state: AppState
     /// Agent name → error from an inline hook install, if any.
     @State private var installErrors: [String: String] = [:]
+    @State private var showReleaseNotes = false
 
     var body: some View {
         SettingsCard {
@@ -124,12 +135,77 @@ struct StatusSettings: View {
             }
         }
 
+        updatesCard
+
         ForEach(AgentRegistry.all, id: \.name) { agent in
             agentCard(agent)
         }
 
         Text("\"Last alert\" updates whenever a hooked agent needs you or finishes a task, even if the notification itself was muted or rate limited.")
             .dsCaption()
+    }
+
+    private var updatesCard: some View {
+        SettingsCard("Updates", systemImage: "arrow.down.circle.fill") {
+            SettingsRow("NotCode \(UpdateChecker.currentVersion)", subtitle: updateStatusCaption) {
+                HStack(spacing: DS.Spacing.s) {
+                    if let release = state.availableRelease {
+                        Button("Release notes") { showReleaseNotes = true }
+                            .controlSize(.small)
+                        Button(state.updating ? "Updating…" : "Update to \(release.version)") {
+                            state.performUpdate()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(state.updating)
+                    } else {
+                        Button("Check for Updates") {
+                            state.checkForUpdates(userInitiated: true)
+                        }
+                        .disabled(state.updateStatus == .checking)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showReleaseNotes) {
+            if let release = state.availableRelease {
+                VStack(alignment: .leading, spacing: DS.Spacing.m) {
+                    Text("NotCode \(release.version)")
+                        .font(.title3.weight(.semibold))
+                    ScrollView {
+                        Text(release.notes)
+                            .font(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Close") { showReleaseNotes = false }
+                        Button(state.updating ? "Updating…" : "Install Update") {
+                            showReleaseNotes = false
+                            state.performUpdate()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(state.updating)
+                    }
+                }
+                .padding(DS.Spacing.l)
+                .frame(width: 480, height: 340)
+            }
+        }
+    }
+
+    private var updateStatusCaption: String {
+        switch state.updateStatus {
+        case .idle:
+            return "Checks GitHub releases automatically every 6 hours."
+        case .checking:
+            return "Checking for updates…"
+        case .upToDate(let date):
+            return "You're up to date ✓ (checked \(Self.relative.localizedString(for: date, relativeTo: Date())))"
+        case .available(let release):
+            return "New version \(release.version) is available."
+        case .failed(let message):
+            return "Update check failed: \(message)"
+        }
     }
 
     private func agentCard(_ agent: AgentModule) -> some View {

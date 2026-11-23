@@ -28,6 +28,7 @@ You kick off a long agent run and walk away. Twenty minutes later it has been si
 - 🪶 **Native Swift, ~5 MB**: no Electron, no background CPU, works even when the app isn't running
 - 🔌 **One-click hook install**: safely merges into `~/.claude/settings.json`, `~/.codex/config.toml` and `~/.cursor/hooks.json` with backups, and plays nice with existing hooks (it chains, never overwrites)
 - ☕ **Keep Mac Awake**: one click in the menu switches macOS sleep off for long agent runs, even with the lid closed (`pmset disablesleep`, asks for your password). It stays off until you click **Let Mac Sleep**, so the menu shows it while it's on
+- 🧩 **Unified MCP Hub & Profiles**: auto-detects MCP servers and extracts existing auth credentials across **Claude Code**, **Claude Desktop**, **Cursor**, **Codex**, **Antigravity**, **Windsurf**, and **VS Code** into one secure pool (`0600`). Create **Personal / Work / Custom** profiles with per-profile API keys, bind project folders to profiles (or let NotCode ask on new projects), and sync everywhere in one click — either via **Direct Sync** or the built-in **Unified Hub Gateway** (`notcode-hook mcp-gateway`)
 
 Works with **Claude Code** (CLI + desktop app), **Codex** (CLI + desktop app) and **Cursor** (via its [hooks](https://cursor.com/docs/hooks); Cursor reports task completion only, since it has no attention/permission hook).
 
